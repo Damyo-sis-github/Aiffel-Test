@@ -1,0 +1,25 @@
+# §11.3 LLM 실행 창. 평일 08:00–18:00 KST 는 본인이 Claude 를 다른 개발에 쓴다.
+# 이 창 안에서 /evolve 는 거부하고 다음 창으로 이월한다 (#29).
+
+timezone: Asia/Seoul
+
+# 실행 "금지" 창 (평일에만 적용)
+blocked_window:
+  weekdays: [MON, TUE, WED, THU, FRI]
+  start: "08:00"
+  end: "18:00"
+
+# 주말·공휴일은 제한 없음
+weekend_unrestricted: true
+holiday_unrestricted: true
+
+# §11.2 evolve 예약 시각 (이월 목적지)
+scheduled_time: "19:00"
+
+# --force 로만 무시 가능. 강제 실행은 evolution_log 에 forced=true 로 남는다.
+allow_force_flag: true
+
+cycle_limits:
+  max_hypotheses: 5
+  max_turns: 40                 # claude -p --max-turns
+  retry_same_day: false         # 실패 시 당일 재시도 없음 → 다음날 19:00

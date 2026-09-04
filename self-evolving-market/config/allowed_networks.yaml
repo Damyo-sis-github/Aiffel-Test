@@ -1,0 +1,21 @@
+# §11.8 3번 / #33 회사 네트워크에서 실행 금지.
+# 로그온 시 실행 모델은 회사에서 로그온해도 발동한다. 이 가드가 없으면
+# 회사 네트워크에서 증권 API 를 호출하게 된다.
+
+# 집 Wi-Fi SSID 화이트리스트. 비어 있으면 실행 거부(fail-closed).
+# §17: 집 Wi-Fi SSID 미확인 → `quant healthcheck --show-network` 로 확인 후 등록.
+ssids: []
+# 예)
+# ssids: [MY_HOME_5G, MY_HOME_2G]
+
+# 유선 연결 등 SSID 를 얻을 수 없는 경우에 허용할 게이트웨이 MAC (선택)
+gateway_macs: []
+
+# 아래 중 하나라도 감지되면 즉시 거부
+reject_on:
+  proxy_env: true               # HTTP_PROXY/HTTPS_PROXY 설정 감지
+  vpn_adapter: true             # VPN 어댑터 활성
+  corporate_dns_suffixes:       # 회사 DNS 접미사
+    - corp.local
+    - ad.company.com
+  corporate_proxy_hosts: []     # 알려진 사내 프록시 호스트

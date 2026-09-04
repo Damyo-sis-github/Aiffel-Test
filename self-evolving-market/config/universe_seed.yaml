@@ -1,0 +1,88 @@
+# §5.1 개별 종목 유니버스 시드.
+# 실운영(offline: false)에서는 pykrx/fdr 로 KOSPI200·KOSDAQ150·S&P500·Nasdaq100 구성종목을
+# 스냅샷 시점 기준으로 가져오고, 이 목록은 그 조회가 실패했을 때의 폴백 + 오프라인 데모용이다.
+#
+# 유동성 필터: KR adv20 >= 10억 원, US adv20 >= $5M (아래 liquidity 참조)
+# 관리·거래정지 종목은 실운영 조회 시 제외한다.
+
+liquidity:
+  KR: {adv20_min: 1_000_000_000, currency: KRW}
+  US: {adv20_min: 5_000_000, currency: USD}
+
+# 벤치마크 지수. 실모드에서는 FinanceDataReader/yfinance 심볼로 그대로 조회된다.
+indices:
+  - {symbol: "KS11", market: KR, name: "KOSPI"}
+
+# 상장폐지 시뮬레이션용 (#2 생존편향 테스트: 스냅샷에 상폐 종목이 최소 1개 있어야 한다)
+simulated_delistings:
+  - {symbol: "DELISTED_KR", market: KR, delist_date: "2019-06-28", sector: 기타}
+  - {symbol: "DELISTED_US", market: US, delist_date: "2021-11-30", sector: Other}
+
+stocks:
+  KR:
+    - {symbol: "005930", name: 삼성전자,       sector: IT}
+    - {symbol: "000660", name: SK하이닉스,     sector: IT}
+    - {symbol: "373220", name: LG에너지솔루션, sector: 2차전지}
+    - {symbol: "207940", name: 삼성바이오로직스, sector: 헬스케어}
+    - {symbol: "005380", name: 현대차,         sector: 자동차}
+    - {symbol: "000270", name: 기아,           sector: 자동차}
+    - {symbol: "068270", name: 셀트리온,       sector: 헬스케어}
+    - {symbol: "005490", name: POSCO홀딩스,    sector: 소재}
+    - {symbol: "035420", name: NAVER,          sector: IT}
+    - {symbol: "035720", name: 카카오,         sector: IT}
+    - {symbol: "051910", name: LG화학,         sector: 2차전지}
+    - {symbol: "006400", name: 삼성SDI,        sector: 2차전지}
+    - {symbol: "105560", name: KB금융,         sector: 금융}
+    - {symbol: "055550", name: 신한지주,       sector: 금융}
+    - {symbol: "086790", name: 하나금융지주,   sector: 금융}
+    - {symbol: "012330", name: 현대모비스,     sector: 자동차}
+    - {symbol: "028260", name: 삼성물산,       sector: 산업재}
+    - {symbol: "010950", name: S-Oil,          sector: 에너지}
+    - {symbol: "096770", name: SK이노베이션,   sector: 에너지}
+    - {symbol: "009540", name: HD한국조선해양, sector: 산업재}
+    - {symbol: "042660", name: 한화오션,       sector: 산업재}
+    - {symbol: "012450", name: 한화에어로스페이스, sector: 방산}
+    - {symbol: "047810", name: 한국항공우주,   sector: 방산}
+    - {symbol: "247540", name: 에코프로비엠,   sector: 2차전지}
+    - {symbol: "086520", name: 에코프로,       sector: 2차전지}
+    - {symbol: "091990", name: 셀트리온헬스케어, sector: 헬스케어}
+    - {symbol: "196170", name: 알테오젠,       sector: 헬스케어}
+    - {symbol: "108320", name: LX세미콘,       sector: IT}
+    - {symbol: "322000", name: HD현대에너지솔루션, sector: 신재생}
+    - {symbol: "017670", name: SK텔레콤,       sector: 통신}
+  US:
+    - {symbol: AAPL,  sector: Technology}
+    - {symbol: MSFT,  sector: Technology}
+    - {symbol: NVDA,  sector: Semiconductor}
+    - {symbol: AMD,   sector: Semiconductor}
+    - {symbol: AVGO,  sector: Semiconductor}
+    - {symbol: MU,    sector: Semiconductor}
+    - {symbol: LRCX,  sector: Semiconductor}
+    - {symbol: AMAT,  sector: Semiconductor}
+    - {symbol: TSM,   sector: Semiconductor}
+    - {symbol: GOOGL, sector: Technology}
+    - {symbol: META,  sector: Technology}
+    - {symbol: AMZN,  sector: ConsumerDisc}
+    - {symbol: TSLA,  sector: ConsumerDisc}
+    - {symbol: NFLX,  sector: Communication}
+    - {symbol: JPM,   sector: Financials}
+    - {symbol: BAC,   sector: Financials}
+    - {symbol: GS,    sector: Financials}
+    - {symbol: XOM,   sector: Energy}
+    - {symbol: CVX,   sector: Energy}
+    - {symbol: COP,   sector: Energy}
+    - {symbol: JNJ,   sector: Healthcare}
+    - {symbol: UNH,   sector: Healthcare}
+    - {symbol: LLY,   sector: Healthcare}
+    - {symbol: ISRG,  sector: Healthcare}
+    - {symbol: CAT,   sector: Industrials}
+    - {symbol: DE,    sector: Industrials}
+    - {symbol: HON,   sector: Industrials}
+    - {symbol: LMT,   sector: Defense}
+    - {symbol: RTX,   sector: Defense}
+    - {symbol: NOC,   sector: Defense}
+    - {symbol: CCJ,   sector: Uranium}
+    - {symbol: ENPH,  sector: CleanEnergy}
+    - {symbol: FSLR,  sector: CleanEnergy}
+    - {symbol: ALB,   sector: Materials}
+    - {symbol: RKLB,  sector: Space}

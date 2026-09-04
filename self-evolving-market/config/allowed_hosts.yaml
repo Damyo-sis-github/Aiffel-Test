@@ -1,0 +1,22 @@
+# §3.7 / #31 회사 장비에서 실행 금지.
+# 여기 등록된 hostname 에서만 daily/evolve 가 실행된다. 비어 있으면 실행 거부(fail-closed).
+# §17: 노트북 hostname 미확인 → `quant healthcheck --show-host` 로 확인 후 등록.
+
+hostnames: []
+# 예)
+# hostnames:
+#   - MY-LAPTOP
+
+# 회사 장비 판별 힌트. hostname 또는 도메인에 이 패턴이 있으면 즉시 종료.
+corporate_patterns:
+  - "corp"
+  - "ad."
+  - ".local.company"
+  - "kfm"
+
+# 도메인 조인 여부 검사 (Windows: USERDNSDOMAIN 환경변수)
+reject_if_domain_joined: true
+
+# 가드를 우회할 수 있는 유일한 방법. 개발/CI 전용이며 실운영에서 켜면 안 된다.
+# 환경변수 QUANT_GUARD_BYPASS=1 로만 활성화되고, 켜지면 모든 리포트에 배너가 박힌다.
+allow_bypass_env: true

@@ -1,0 +1,10 @@
+{
+  "hash": "45fe8efc9ca9a92b",
+  "targets": [
+    "app/evaluator",
+    "config/gates.yaml",
+    "config/risk.yaml"
+  ],
+  "reason": "구현 완료 봉인",
+  "acked_by": "unknown"
+}

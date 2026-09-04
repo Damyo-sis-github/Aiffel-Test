@@ -1,0 +1,38 @@
+# §6.3 테마 바스켓 정의 + 점수 가중치.
+# 바스켓 강도 = 상대강도 40 + 거래량 증가 20 + 폭 20 + 신고가 비율 20
+
+scoring:
+  theme:
+    relative_strength: 40
+    volume_growth: 20
+    breadth: 20
+    new_high_ratio: 20
+    lookback_days: 63
+  country:                      # §6.4 국가 ETF 점수
+    relative_strength: 40       # SPY 대비 63일
+    currency_strength: 20
+    breadth: 20
+    volume_growth: 20
+    lookback_days: 63
+  screener:                     # §6.5 종목 스크리너 (3계층)
+    top_themes: 3
+    top_countries: 3
+    relative_strength: 35
+    volume_growth: 25
+    near_high: 25
+    liquidity: 15
+    output_size: 20
+
+baskets:
+  semiconductor: {US: [SMH, NVDA, AMD, AVGO, TSM, MU, LRCX, AMAT], KR: ["000660", "005930"]}
+  tech:          {US: [XLK, AAPL, MSFT, GOOGL, META], KR: ["035420", "035720"]}
+  energy:        {US: [XLE, XOM, CVX, COP], KR: ["096770", "010950"]}
+  healthcare:    {US: [XLV, JNJ, UNH, LLY], KR: ["207940", "068270"]}
+  financials:    {US: [XLF, JPM, BAC, GS], KR: ["105560", "055550"]}
+  battery:       {US: [LIT, ALB], KR: ["373220", "006400", "247540"]}
+  defense:       {US: [XAR, LMT, RTX, NOC], KR: ["012450", "047810"]}
+  robotics:      {US: [BOTZ, ROBO, ISRG], KR: ["108320"]}
+  uranium:       {US: [URA, CCJ], KR: []}
+  space:         {US: [ARKX, RKLB], KR: []}
+  clean_energy:  {US: [ICLN, ENPH, FSLR], KR: ["322000"]}
+  industrials:   {US: [XLI, CAT, DE, HON], KR: ["009540", "042660"]}

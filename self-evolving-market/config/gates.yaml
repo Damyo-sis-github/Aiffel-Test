@@ -1,0 +1,67 @@
+# §7.5 공통 채택 게이트 + §7.6 계열별 게이트.
+# 이 파일은 protected.lock 대상. 변경은 사람 승인(G2): `quant lock --update --ack`.
+# LLM(Generator/Auditor)은 이 파일을 수정할 수 없다.
+
+common:
+  # 1. 기대값
+  expectancy_min: 0.0
+  # 2. 승률
+  win_rate_min: 0.50
+  win_rate_ci_lower_min: 0.45
+  min_closed_trades: 30
+  # 3. 샤프 (호라이즌별)
+  sharpe_min: 0.5
+  sharpe_min_short_horizon: 0.7   # h <= 1
+  short_horizon_days: 1
+  # 4. MDD
+  mdd_max: 0.20
+  # 5. 대조군 부트스트랩 (alpha_K = base_alpha / sqrt(K))
+  control_base_alpha: 0.05
+  control_ensemble_size: 100
+  control_bootstrap_iters: 2000
+  # 6. 폴드 일관성
+  fold_consistency_min: 0.60
+  # 7. 과적합 경고
+  is_oos_sharpe_ratio_max: 2.0
+  # 8. 거래 수
+  min_trades: 30
+
+# §7.6 도구 계열별 추가 게이트
+families:
+  LONG: {}
+  ETF_ROT: {}
+  LEV_ETF:
+    mdd_max: 0.15
+    sideways_regime_expectancy_min: -0.01
+  INV_ETF:
+    mdd_max: 0.15
+    sideways_regime_expectancy_min: -0.01
+  SHORT_US:
+    mdd_max: 0.15
+    worst_single_trade_loss_max: 0.15
+
+# §7.6 계열 활성화 순서: 아래 계열은 gating_prerequisite 중 하나에
+# active 전략이 1개 이상 있어야 진화/채택이 열린다. (#28)
+family_activation_order:
+  gating_prerequisite: [LONG, ETF_ROT]
+  gated: [SHORT_US, LEV_ETF, INV_ETF]
+
+# §1.2 판정 표본
+sample:
+  preliminary_closed_trades: 30
+  official_closed_trades: 100
+  official_account: ACC_L
+
+# §7.4 워크포워드
+walkforward:
+  train_months: 36
+  test_months: 6
+  step_months: 6
+  min_folds: 10
+  max_param_grid: 50
+
+# §10.4 다양성
+diversity:
+  similarity_threshold: 0.90
+  max_same_family_per_cycle: 2
+  max_hypotheses_per_cycle: 5

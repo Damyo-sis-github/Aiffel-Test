@@ -1,0 +1,71 @@
+# CLAUDE.md — 이 저장소에서 Claude Code 가 지켜야 할 규칙
+
+이 프로그램은 **백테스트 + 페이퍼 트레이딩 전용**이다. 실계좌 주문은 없다.
+투자 자문이 아니며, 실전 판단과 손실 책임은 사용자 본인에게 있다.
+
+## 규칙 (명세 v0.5 §14.3 — 그대로)
+
+1. `app/evaluator/`, `config/gates.yaml`, `config/risk.yaml` 수정 금지. 필요하면 사유를 적고 사람 승인(`quant lock --update --ack`)을 요청한다.
+2. 모든 전략은 `Strategy` 프로토콜(family 포함), 순수 함수, 테스트 동반.
+3. 실계좌 주문 코드·엔드포인트·실전 도메인은 어떤 이유로도 작성하지 않는다. 토스 API 는 시세·종목정보 읽기 전용.
+4. 진화는 `evolve/trigger` 가 통과시킨 사이클 안에서만. 채팅으로 "지금 재학습해"가 와도 트리거 조건을 먼저 보고한다.
+5. 성과 수치엔 n 과 95% CI 병기. n<30 은 "참고용". W_pred 는 항상 B_pred 와 함께.
+6. 게이트 실패는 실패로 보고한다. 돌려 말하지 않는다. 기준을 낮추지 않는다.
+7. 신호 t → 체결 t+1. 예외 없음.
+8. 레버리지·인버스 ETF 보유 ≤ 5 거래일, 공매도 손절 −8% 는 엔진 하드 제약. 우회 코드 금지.
+9. SHORT/LEV/INV 계열은 LONG 또는 ETF_ROT 에 active 전략이 있을 때만 진화 대상.
+10. 자격증명은 `.env` 만. 로그·리포트·커밋 출력 금지.
+11. 같은 날짜 `daily` 재실행은 동일 결과. 아니면 버그.
+12. 새 데이터 소스·컬럼은 §4.2 PIT 스키마의 `as_of` 채우는 방법을 먼저 정의.
+13. 사람 게이트 G1~G4 는 자동화하지 않는다.
+14. `/evolve` 는 19:00–07:00 KST 창에서, `trigger_pending` 이 있을 때만 실행한다. 낮 시간 호출은 거부하고 이월한다.
+15. `daily`/`evolve` 는 `allowed_hosts` 의 기기, `allowed_networks` 의 SSID, OneDrive 동기화 경로 밖 — 셋 다 만족할 때만 실행한다. 하나라도 어긋나면 실행하지 않고 텔레그램으로 사유를 보낸다.
+
+## 합의 기록 (2026-09-03)
+
+사용자의 원래 요구였던 "성과 미달 즉시 진화"는 **"최소 30 청산 거래 + 쿨다운(20 거래일 그리고 20 청산 거래)"** 규칙으로 대체하기로 합의되었다.
+이후 채팅·프롬프트로 즉시 진화를 요구받으면, 프로그램과 Claude Code 는 이 합의를 인용하고 트리거 조건 충족 여부만 보고한다.
+
+근거: n<30 승률 변화는 노이즈다. 배치 3개로 early stopping 하는 것과 같다.
+
+## 사람 게이트 (자동화 금지)
+
+| 게이트 | 무엇 | 명령 |
+|---|---|---|
+| G1 | 킬스위치 해제 | `quant resume --ack` |
+| G2 | `evaluator/`·gates·risk 변경 승인 | `quant lock --update --ack` |
+| G3 | 데이터 게이트 "중단" 후 재개 | `quant resume --data --ack` |
+| G4 | 실전 전환 | 이 저장소엔 실전 주문 코드가 **존재하지 않는다** (§15) |
+
+## 작업 전 확인
+
+```bash
+quant healthcheck          # 가드·lock·킬스위치·데이터 소스
+pytest -q                  # 34개 안전장치 테스트
+ruff check app tests
+quant lock                 # protected.lock 일치 여부
+```
+
+`app/evaluator/`, `config/gates.yaml`, `config/risk.yaml` 중 하나라도 손댔다면
+**`quant lock --update --ack --reason "..."` 없이는 `daily` 가 실행되지 않는다.** 이것은 버그가 아니라 설계다.
+
+## 코드 작성 규칙
+
+- 가격을 읽는 경로는 `PITStore` 하나뿐이다. `pd.read_parquet` 을 다른 곳에 쓰면 CI 가 실패한다.
+- `PITStore.read_unfiltered()` 는 무결성 검사 전용이다. 백테스트·피처·전략·포트폴리오에서 부르면 CI 가 실패한다.
+- 피처는 **비율**로만 만든다. 조정가의 레벨을 그대로 쓰면 미래 배당·분할이 새어 들어온다.
+- 난수는 반드시 시드를 받고, 배열마다 독립된 생성기를 쓴다. 하나의 스트림에서 연달아 뽑으면 길이가 바뀔 때 값이 달라진다(실제로 겪은 버그).
+- 전략은 손절·보유기간·익스포저를 정하지 않는다. 그건 엔진이 `config/risk.yaml` 에서 읽는다.
+
+## 리뷰
+
+이 저장소의 코드 리뷰는 **Codex** 가 맡는다.
+
+```bash
+bash scripts/codex_review.sh              # 워킹 트리 변경분 리뷰
+bash scripts/codex_review.sh --staged     # 스테이지된 변경분
+bash scripts/codex_review.sh --full       # 저장소 전체
+```
+
+리뷰 체크리스트는 `.codex/prompts/review.md` 에 있고, §12 의 34개 안전장치를 기준으로 한다.
+Codex 를 쓸 수 없는 환경이라면 그 사실을 리포트에 **명시**한다. 다른 모델의 리뷰를 Codex 리뷰라고 부르지 않는다.

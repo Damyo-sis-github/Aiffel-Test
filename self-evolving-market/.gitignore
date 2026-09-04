@@ -1,0 +1,34 @@
+# 자격증명 — 절대 커밋 금지 (#17)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 데이터 (§11.5: parquet 은 수십 MB 라 저장소 포함 가능하지만, 초기엔 제외)
+data/
+!data/.gitkeep
+
+# 상태·리포트는 백업 대상이므로 커밋한다 (§11.5 git push 백업).
+# 다만 캐시성 파일은 제외.
+state/snapshots/
+reports/**/*.tmp
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# OS / 편집기
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
+
+# Codex 리뷰 산출물은 커밋한다 (docs/review/). 임시 파일만 제외.
+docs/review/*.tmp

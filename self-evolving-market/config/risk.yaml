@@ -1,0 +1,71 @@
+# §8 L5a 포트폴리오·리스크. protected.lock 대상, 변경은 사람 승인(G2).
+# LLM 은 이 파일을 수정할 수 없다. 손절/익스포저 파라미터를 건드리는 가설은 자동 반려(#27).
+
+accounts:
+  ACC_S:
+    capital_krw: 1_000_000
+    purpose: "실행 가능성·정수 주식 현실 검증"
+    max_positions: 8
+    min_positions: 5
+    position_limit_pct: 0.20
+    sector_limit_pct: 0.40
+    min_shares: 1          # 최소 1주 규칙
+    official_judgement: false
+  ACC_L:
+    capital_krw: 100_000_000
+    purpose: "통계·공식 판정"
+    max_positions: null
+    min_positions: null
+    position_limit_pct: 0.05
+    sector_limit_pct: 0.25
+    min_shares: 1
+    official_judgement: true
+
+limits:
+  market_weight_target: {KR: 0.50, US: 0.50}
+  market_weight_tolerance_pp: 0.20
+  cash_min_pct: 0.10
+  # §8.2 명목 익스포저 (레버리지 배수 반영)
+  gross_notional_max_pct: 1.50
+  short_notional_max_pct: 0.30
+  lev_inv_notional_max_pct: 0.30
+
+allocation:
+  method: sharpe_proportional   # 활성 전략 균등 → 126일 샤프 비례
+  sharpe_lookback_days: 126
+  per_strategy_max_pct: 0.40
+  per_family_max_pct: 0.50
+  warmup_days: 126              # 그 전에는 균등 배분
+
+# §8.2 손절. 엔진 하드 제약(#20) — 전략이 우회할 수 없다.
+stop_loss:
+  LONG: {h1: 0.08, h5: 0.08, h20: 0.15, h60: 0.15}
+  ETF_ROT: {h20: 0.15, h60: 0.15}
+  SHORT_US: {default: 0.08}     # 강제. 무시 불가
+  LEV_ETF: {default: 0.10}
+  INV_ETF: {default: 0.10}
+
+# §7.6 하드 제약 (엔진 강제)
+hard_constraints:
+  max_hold_days:
+    LEV_ETF: 5
+    INV_ETF: 5
+  max_horizon_days:
+    LEV_ETF: 5
+    INV_ETF: 5
+  regime_required:
+    LEV_ETF: [bull]
+    INV_ETF: [bear]
+  short_us:
+    exclude_hard_to_borrow: true
+    exclude_mcap_bottom_pct: 0.20
+
+killswitch:
+  portfolio_mdd_pct: 0.15       # §8.2 임시값. 실전 전 본인 확정 필수 (§15)
+  scope: [signals, evolution]
+  resume_requires_human_ack: true   # G1
+
+# §9 괴리 추적 → quarantine
+divergence:
+  window_trades: 20
+  threshold_pct: 0.003          # 0.3%

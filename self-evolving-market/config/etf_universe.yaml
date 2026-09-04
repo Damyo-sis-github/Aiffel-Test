@@ -1,0 +1,61 @@
+# §5.2~5.4 ETF 유니버스. kind: etf | country_etf | lev_etf | inv_etf
+# leverage 필드는 lev/inv 에 필수 (명목 익스포저 계산에 사용, §8.2)
+
+sector_theme:
+  US:
+    - {symbol: XLK,  name: "US Technology",      theme: tech}
+    - {symbol: XLE,  name: "US Energy",          theme: energy}
+    - {symbol: XLV,  name: "US Health Care",     theme: healthcare}
+    - {symbol: XLF,  name: "US Financials",      theme: financials}
+    - {symbol: XLI,  name: "US Industrials",     theme: industrials}
+    - {symbol: SMH,  name: "Semiconductors",     theme: semiconductor}
+    - {symbol: XAR,  name: "Aerospace & Defense", theme: defense}
+    - {symbol: BOTZ, name: "Robotics & AI",      theme: robotics}
+    - {symbol: ROBO, name: "Robotics",           theme: robotics}
+    - {symbol: URA,  name: "Uranium",            theme: uranium}
+    - {symbol: ARKX, name: "Space Exploration",  theme: space}
+    - {symbol: ICLN, name: "Clean Energy",       theme: clean_energy}
+  KR:
+    - {symbol: "091160", name: "KODEX 반도체",   theme: semiconductor}
+    - {symbol: "091170", name: "KODEX 은행",     theme: financials}
+    - {symbol: "266370", name: "KODEX 2차전지산업", theme: battery}
+    - {symbol: "305720", name: "KODEX 2차전지산업", theme: battery}
+    - {symbol: "139260", name: "TIGER 200 IT",   theme: tech}
+    - {symbol: "227540", name: "TIGER 200 헬스케어", theme: healthcare}
+    - {symbol: "117460", name: "KODEX 에너지화학", theme: energy}
+
+country_region:
+  - {symbol: EWY,  name: "South Korea", region: asia}
+  - {symbol: EWJ,  name: "Japan",       region: asia}
+  - {symbol: INDA, name: "India",       region: asia}
+  - {symbol: EWT,  name: "Taiwan",      region: asia}
+  - {symbol: VNM,  name: "Vietnam",     region: asia}
+  - {symbol: MCHI, name: "China",       region: asia}
+  - {symbol: EWZ,  name: "Brazil",      region: latam}
+  - {symbol: EWG,  name: "Germany",     region: europe}
+  - {symbol: EEM,  name: "EM Broad",    region: global}
+  - {symbol: VGK,  name: "Europe Broad", region: europe}
+  - {symbol: SPY,  name: "US S&P500",   region: us}
+  - {symbol: QQQ,  name: "US Nasdaq100", region: us}
+
+# §5.4 화이트리스트만. 이 목록 밖의 레버리지·인버스는 유니버스에 들어올 수 없다.
+leveraged_inverse:
+  US:
+    - {symbol: TQQQ, kind: lev_etf, leverage: 3.0,  underlying: QQQ}
+    - {symbol: SQQQ, kind: inv_etf, leverage: -3.0, underlying: QQQ}
+    - {symbol: SOXL, kind: lev_etf, leverage: 3.0,  underlying: SMH}
+    - {symbol: SOXS, kind: inv_etf, leverage: -3.0, underlying: SMH}
+    - {symbol: UPRO, kind: lev_etf, leverage: 3.0,  underlying: SPY}
+    - {symbol: SPXU, kind: inv_etf, leverage: -3.0, underlying: SPY}
+    - {symbol: TNA,  kind: lev_etf, leverage: 3.0,  underlying: IWM}
+    - {symbol: TZA,  kind: inv_etf, leverage: -3.0, underlying: IWM}
+  KR:
+    - {symbol: "122630", kind: lev_etf, leverage: 2.0,  name: "KODEX 레버리지"}
+    - {symbol: "114800", kind: inv_etf, leverage: -1.0, name: "KODEX 인버스"}
+    - {symbol: "252670", kind: inv_etf, leverage: -2.0, name: "KODEX 200선물인버스2X"}
+    - {symbol: "233740", kind: lev_etf, leverage: 2.0,  name: "KODEX 코스닥150레버리지"}
+    - {symbol: "251340", kind: inv_etf, leverage: -1.0, name: "KODEX 코스닥150선물인버스"}
+
+benchmarks:
+  KR: "KOSPI"
+  US: "SPY"

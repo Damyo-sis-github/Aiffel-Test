@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# §12 안전장치 테스트가 CI 의 본체다. 하나라도 깨지면 머지하지 않는다.
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+      QUANT_GUARD_BYPASS: "1"      # CI 는 등록된 기기·네트워크가 아니다
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: 의존성 설치
+        run: |
+          uv venv .venv --python 3.11
+          . .venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: 린트
+        run: |
+          . .venv/bin/activate
+          ruff check app tests
+
+      - name: 실계좌 주문 코드 검사 (#16)
+        run: |
+          . .venv/bin/activate
+          pytest -q tests/test_source_policy.py
+
+      - name: 시크릿 스캔 (#17)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: false
+
+      - name: 안전장치 테스트 전체 (§12 #1~#34)
+        run: |
+          . .venv/bin/activate
+          pytest -q
+
+      - name: protected.lock 일치 확인 (#6)
+        run: |
+          . .venv/bin/activate
+          python -m app.cli lock
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      PYTHONUTF8: "1"
+      QUANT_GUARD_BYPASS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: 엔드투엔드 스모크 (합성 데이터)
+        run: |
+          uv venv .venv --python 3.11
+          . .venv/bin/activate
+          uv pip install -e ".[dev]"
+          export QUANT_ROOT=$PWD
+          python -m app.cli backfill --date 2020-12-31 --start 2018-01-01
+          python -m app.cli lock --update --ack --reason ci
+          python -m app.cli daily --date 2020-12-28 --skip-guards
+          python -m app.cli daily --date 2020-12-29 --skip-guards
+          python -m app.cli replay --date 2020-12-29

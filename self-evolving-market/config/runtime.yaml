@@ -1,0 +1,67 @@
+# §11 운영 설정. 기기·네트워크·경로 가드는 §3.7 / #31 #33 #34.
+
+paths:
+  # §11.8 1번: 저장소는 OneDrive 루트·KFM 폴더·Documents 밖이어야 한다.
+  expected_repo_root_windows: 'C:\dev\quant'
+  data_dir: data
+  reports_dir: reports
+  state_dir: state
+  audit_dir: audit
+
+# #34 동기화 폴더 안에서 실행 금지. 경로에 이 조각이 들어가면 거부.
+forbidden_path_fragments:
+  - OneDrive
+  - "Google Drive"
+  - Dropbox
+  - iCloudDrive
+  - "\\Documents\\"
+  - "\\Desktop\\"
+  - "\\Pictures\\"
+  - SharePoint
+
+# #23 시계 오차
+clock:
+  max_drift_seconds: 60
+  ntp_servers: [time.windows.com, pool.ntp.org]
+
+# §11.2 스케줄 (windows/register_tasks.ps1 이 이 값을 읽어 schtasks 등록)
+schedule:
+  timezone: Asia/Seoul
+  tasks:
+    - {name: quant-daily-logon,  trigger: onlogon,             cmd: "daily --catchup",     run_as_logged_on: false}
+    - {name: quant-daily-kr,     trigger: "weekly MON-FRI 16:30", cmd: "daily --market kr", run_as_logged_on: false}
+    - {name: quant-daily-us,     trigger: "weekly TUE-SAT 07:00", cmd: "daily --market us", run_as_logged_on: false}
+    - {name: quant-evolve,       trigger: "daily 19:00",       cmd: "evolve --if-pending", run_as_logged_on: true}
+    - {name: quant-weekly,       trigger: "weekly SAT 09:00",  cmd: "weekly",              run_as_logged_on: false}
+    - {name: quant-monthly,      trigger: "monthly 1 09:00",   cmd: "monthly",             run_as_logged_on: false}
+    - {name: quant-healthcheck,  trigger: "hourly",            cmd: "healthcheck",         run_as_logged_on: false}
+
+retry:
+  attempts: 3
+  interval_minutes: 10
+
+catchup:
+  max_days: 60          # 이보다 오래 꺼져 있었으면 사람 확인 요청
+  label: "보충"
+
+# §4.1 데이터 소스. offline=true 이거나 라이브러리가 없으면 synthetic 으로 폴백.
+# synthetic 은 결정론적 합성 데이터(테스트·데모용). 실운영은 반드시 offline=false.
+data_sources:
+  offline: true
+  synthetic_seed: 20260903
+  kr_prices: pykrx          # pykrx | fdr | synthetic
+  us_prices: yfinance       # yfinance | synthetic
+  macro: fred               # fred | ecos | synthetic
+  fx: fred
+  history_start: "2015-01-01"
+
+# §4.1 토스 API — 시세·종목정보 읽기 전용 allowlist. 주문 계열 문자열은 CI 실패(#16).
+toss:
+  enabled: false
+  base_url: "https://openapi.tossinvest.com"
+  allowed_endpoints:
+    - /v1/market/quote
+    - /v1/market/daily
+    - /v1/instruments
+  # 아래 문자열이 코드베이스에 존재하면 CI 실패. tests/test_no_live_order.py 참조.
+  forbidden_markers: [order, orders, submit-order, cancel-order, modify-order, execution/live]
