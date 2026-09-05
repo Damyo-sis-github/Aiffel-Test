@@ -37,7 +37,13 @@ python -m app.cli backfill --date 2020-12-31 --start 2015-01-01
 python -m app.cli lock --update --ack --reason "최초 봉인"
 python -m app.cli daily --date 2020-06-01 --skip-guards
 cat reports/daily/2020-06-01.md
+
+python -m app.cli report --open           # 대시보드 HTML 하나를 만들고 브라우저로 엽니다
 ```
+
+`report` 는 **서버를 띄우지 않습니다.** 로컬 웹서버는 포트를 열고 그건 회사 네트워크에서
+감지됩니다(§11.8). 외부 CDN 도 쓰지 않아 오프라인에서 열립니다. 읽기 전용이라
+대시보드에서 게이트를 통과시키거나 상태를 바꿀 수 있는 경로는 없습니다.
 
 전략 평가:
 
@@ -144,7 +150,7 @@ powershell -ExecutionPolicy Bypass -File windows\register_tasks.ps1
 
 ```
 app/
-  cli.py                  daily weekly monthly replay resume lock healthcheck evolve backfill evaluate calendar
+  cli.py                  daily weekly monthly report replay resume lock healthcheck audit evolve backfill evaluate calendar
   guards/                 host network path clock protected llm_window     ← 실행 전 fail-closed 검사
   data/                   adapters/{synthetic,market_sources,toss} pit_store integrity ingest meta_db schema
   universe/               snapshot exclusions
@@ -157,14 +163,15 @@ app/
   execution/              broker(Protocol) paper_sim                 ← PaperBroker 만 존재
   evolve/                 trigger context_pack curator similarity
   pipeline/               daily positions state
-  reports/ alerts/
+  reports/                daily periodic dashboard(정적 HTML, 서버·CDN 없음)
+  alerts/
 config/                   gates risk costs etf_universe themes exclusions universe_seed
                           runtime allowed_hosts allowed_networks llm_window alerts holidays_kr protected.lock
 windows/                  register_tasks.ps1 run_daily.cmd run_evolve.cmd run_task.cmd
 .claude/commands/         evolve.md audit.md                          ← LLM 호출은 이 두 파일뿐
 .codex/prompts/           review.md                                   ← 리뷰어는 Codex
 scripts/codex_review.sh
-tests/                    156개. §12 의 #1~#34 를 항목별로 강제
+tests/                    213개. §12 의 #1~#34 를 항목별로 강제
 ```
 
 ---

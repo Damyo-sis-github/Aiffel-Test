@@ -339,6 +339,20 @@ def cmd_calendar(args) -> int:
     return 0
 
 
+def cmd_report(args) -> int:
+    """로컬 정적 대시보드 생성. 서버를 띄우지 않고 HTML 파일 하나만 만든다."""
+    import webbrowser
+
+    from app.reports.dashboard import write
+
+    p = write(dt.date.fromisoformat(args.date) if args.date else None)
+    print(f"대시보드: {p}")
+    print("브라우저에서 이 파일을 여십시오. (회사 계정으로 로그인된 브라우저는 피하십시오 — §11.8 4번)")
+    if args.open:
+        webbrowser.open(p.resolve().as_uri())
+    return 0
+
+
 def cmd_weekly(args) -> int:
     from app.reports.periodic import write_weekly
 
@@ -428,6 +442,11 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--from", dest="from_year", type=int, default=2013)
     c.add_argument("--to", dest="to_year", type=int, default=dt.date.today().year)
     c.set_defaults(func=cmd_calendar)
+
+    rep = sub.add_parser("report", help="로컬 대시보드 HTML 생성 (서버 없음)")
+    rep.add_argument("--date", help="기준일. 생략하면 마지막 daily 실행일")
+    rep.add_argument("--open", action="store_true", help="생성 후 브라우저로 열기")
+    rep.set_defaults(func=cmd_report)
 
     w = sub.add_parser("weekly", help="§13.2 주간 리포트")
     w.add_argument("--date")

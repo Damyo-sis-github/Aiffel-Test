@@ -113,6 +113,10 @@ class FeatureBuilder:
             for _, g in prices.groupby("symbol", sort=True)
             if len(g) >= 2
         ]
+        if not frames:
+            # 데이터가 1일치뿐이면 여기서 pandas 가 "No objects to concatenate" 라는
+            # 알아볼 수 없는 오류를 낸다. 원인을 말해주는 빈 패널로 대신한다.
+            return FeaturePanel(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), cutoff)
         feats = pd.concat(frames, ignore_index=True)
         feats = (
             feats.set_index(["event_date", "symbol"])
