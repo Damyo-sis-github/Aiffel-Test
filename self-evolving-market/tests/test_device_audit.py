@@ -249,3 +249,31 @@ def test_shipped_policy_is_conservative(sandbox):
         "예외는 기본 꺼짐이어야 합니다. 켜는 것은 사용자가 근거를 적고 하는 결정입니다."
     )
     assert cfg["watch_promotion"] is True
+
+
+# ---------------------------------------------------------------- 실기기 회귀
+def test_sync_roots_are_deduplicated(monkeypatch):
+    """OneDrive 와 OneDriveCommercial 이 같은 경로를 가리키면 한 번만 보고한다.
+
+    실기기 감사에서 같은 경로가 두 번 찍혔다.
+    """
+    from app.guards.device_audit import detect_sync_roots
+
+    monkeypatch.setenv("OneDrive", r"C:\Users\user\OneDrive - 디알비동일")
+    monkeypatch.setenv("OneDriveCommercial", r"C:\Users\user\OneDrive - 디알비동일")
+    assert len(detect_sync_roots()) == 1
+
+
+def test_sync_roots_keep_distinct_paths(monkeypatch):
+    from app.guards.device_audit import detect_sync_roots
+
+    monkeypatch.setenv("OneDrive", r"C:\Users\user\OneDrive - 회사")
+    monkeypatch.setenv("OneDriveConsumer", r"C:\Users\user\OneDrive")
+    assert len(detect_sync_roots()) == 2
+
+
+def test_known_folder_keys_cover_downloads_and_media():
+    """실기기에서 Pictures 만 잡혔는데 다운로드·동영상도 KFM 대상이다."""
+    from app.guards.device_audit import KNOWN_FOLDER_KEYS
+
+    assert set(KNOWN_FOLDER_KEYS.values()) >= {"Documents", "Desktop", "Pictures", "Downloads"}

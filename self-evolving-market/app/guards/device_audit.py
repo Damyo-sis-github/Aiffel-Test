@@ -232,35 +232,55 @@ def detect_agents(inventory: dict) -> list[tuple[str, str]]:
 # ---------------------------------------------------------------- 동기화
 
 def detect_sync_roots() -> list[str]:
+    """OneDrive 동기화 루트. `OneDrive` 와 `OneDriveCommercial` 이 같은 값을 가리키는 일이
+    흔하므로 **중복을 제거**한다 (실제 출력에서 같은 경로가 두 번 찍혔다)."""
     import os
 
-    return [v for k, v in os.environ.items() if k.upper().startswith("ONEDRIVE") and v]
+    seen: dict[str, str] = {}
+    for key, value in sorted(os.environ.items()):
+        if key.upper().startswith("ONEDRIVE") and value:
+            seen.setdefault(value.rstrip("\\").lower(), value)
+    return list(seen.values())
+
+
+# 레지스트리 키 → 영어 기준 이름. 실제 폴더명은 로케일마다 다르므로
+# (한국어 Windows 의 Pictures 는 '사진'이 아니라 '그림'이다) 경로에서 직접 읽는다.
+KNOWN_FOLDER_KEYS = {
+    "Personal": "Documents",
+    "Desktop": "Desktop",
+    "My Pictures": "Pictures",
+    "My Video": "Videos",
+    "My Music": "Music",
+    "{374DE290-123F-4565-9164-39C4925E467B}": "Downloads",
+}
 
 
 def detect_kfm() -> list[tuple[str, str]]:
-    """알려진 폴더(문서·바탕화면·사진)가 OneDrive 로 리디렉션됐는지."""
+    """알려진 폴더가 OneDrive 로 리디렉션됐는지 (KFM).
+
+    라벨은 **실제 폴더명**을 쓴다. 하드코딩한 한글 이름을 쓰면 로케일이 다를 때
+    엉뚱한 이름이 찍힌다 — 실제로 'Pictures' 를 '사진'이라 찍었는데 폴더명은 '그림'이었다.
+    """
     import os
     import winreg  # type: ignore[import-not-found]
 
-    keys = {
-        "Personal": "문서",
-        "Desktop": "바탕 화면",
-        "My Pictures": "사진",
-    }
     out: list[tuple[str, str]] = []
     try:
         with winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
             r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
         ) as k:
-            for name, label in keys.items():
+            for name, english in KNOWN_FOLDER_KEYS.items():
                 try:
                     value, _ = winreg.QueryValueEx(k, name)
                 except OSError:
                     continue
                 expanded = os.path.expandvars(str(value))
-                if "onedrive" in expanded.lower():
-                    out.append((label, expanded))
+                if "onedrive" not in expanded.lower():
+                    continue
+                actual = expanded.replace("/", "\\").rstrip("\\").split("\\")[-1]
+                label = f"{actual} ({english})" if actual and actual != english else english
+                out.append((label, expanded))
     except OSError:
         return []
     return out

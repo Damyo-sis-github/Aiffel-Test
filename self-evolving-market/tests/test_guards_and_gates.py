@@ -332,3 +332,19 @@ def test_corrupt_killswitch_state_is_fail_closed(sandbox):
     state_dir().mkdir(parents=True, exist_ok=True)
     (state_dir() / "killswitch.json").write_text("{깨진 json", encoding="utf-8")
     assert KillSwitch().tripped
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        # 실기기 감사에서 확인: 한국어 Windows 의 Pictures 폴더명은 '사진'이 아니라 '그림'이다.
+        r"C:\Users\user\그림\quant",
+        r"C:\Users\user\OneDrive - 디알비동일\그림\quant",
+        r"C:\Users\user\동영상\quant",
+        r"C:\Users\user\음악\quant",
+        r"C:\Users\user\즐겨찾기\quant",
+    ],
+)
+def test_path_guard_rejects_korean_known_folders(sandbox, monkeypatch, path):
+    monkeypatch.delenv("QUANT_GUARD_BYPASS", raising=False)
+    assert not path_guard(Path(path)).ok, f"한국어 알려진 폴더인데 통과했습니다: {path}"
