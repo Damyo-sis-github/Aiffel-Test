@@ -11,8 +11,11 @@ import logging
 import os
 from enum import StrEnum
 
+import pandas as pd
+
 from app.config import alerts_cfg
 from app.data.meta_db import MetaDB
+from app.paths import reports_dir
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +55,14 @@ class AlertRouter:
         return self.send(Level.INFO, message)
 
     def retry_failed(self, limit: int = 50) -> int:
-        """지난 실행에서 실패한 알림 재전송."""
+        """지난 실행에서 실패한 알림 재전송.
+
+        콘솔 전용 모드에서는 재전송하지 않는다 — 다시 콘솔에 찍어봤자 같은 곳으로 사라지고,
+        매 실행마다 밀린 알림을 전부 다시 뱉는 소음만 난다. 대기 상태로 남겨두고
+        `quant healthcheck` 가 개수를 보여준다.
+        """
+        if self.console_only():
+            return 0
         rows = self.db.query(
             "SELECT id, level, channel, message FROM alerts WHERE delivered = 0 "
             "ORDER BY id LIMIT ?", (limit,)
@@ -63,6 +73,18 @@ class AlertRouter:
                 self.db.query("UPDATE alerts SET delivered = 1 WHERE id = ?", (int(r["id"]),))
                 sent += 1
         return sent
+
+    def pending(self, levels: tuple[str, ...] = ("critical", "error")) -> pd.DataFrame:
+        """아직 사람에게 닿지 못한 알림. healthcheck 가 이걸 보여준다."""
+        marks = ",".join("?" * len(levels))
+        return self.db.query(
+            f"SELECT ts, level, channel, message FROM alerts "  # noqa: S608 - 플레이스홀더만 조립
+            f"WHERE delivered = 0 AND level IN ({marks}) ORDER BY id DESC LIMIT 20",
+            levels,
+        )
+
+    def console_only(self) -> bool:
+        return bool(self.cfg.get("offline_console_only", True))
 
     # ------------------------------------------------------------ 내부
 
@@ -80,10 +102,32 @@ class AlertRouter:
               "channel": channel, "message": message[:4000], "delivered": int(ok), "attempts": 1}],
         )
 
+    def _append_log(self, level: Level, channel: str, message: str) -> None:
+        """모든 알림을 파일에도 남긴다.
+
+        작업 스케줄러로 돌면 stdout 은 어디에도 남지 않는다. 콘솔 출력만 믿으면
+        킬스위치·기기 승격 같은 치명적 알림이 **아무도 모르게 사라진다.**
+        """
+        path = reports_dir() / str(self.cfg.get("log_file", "alerts.log"))
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as f:
+                ts = dt.datetime.now().isoformat(timespec="seconds")
+                f.write(f"[{ts}] [{level.value.upper():8s}] [{channel}] {message}\n")
+        except OSError as exc:  # 로그 실패가 daily 를 죽이면 안 된다
+            log.warning("알림 로그 기록 실패: %s", type(exc).__name__)
+
     def _deliver(self, channel: str, level: Level, message: str) -> bool:
-        if self.cfg.get("offline_console_only", True) or channel == "console":
+        # 어떤 경로든 파일 로그는 항상 남긴다.
+        self._append_log(level, channel, message)
+
+        if self.console_only() or channel == "console":
             print(f"[알림/{channel}/{level.value}] {message}")
-            return True
+            # 콘솔은 "전달"이 아니다. info 만 전달로 치고, critical/error/warn 은
+            # 미전달로 남겨 실제 채널이 생겼을 때 다시 보내고, healthcheck 에도 뜬다.
+            counted = {str(x) for x in (self.cfg.get("console_counts_as_delivery_for") or ["info"])}
+            return level.value in counted
+
         try:
             if channel == "telegram":
                 return _send_telegram(message, int((self.cfg["channels"]["telegram"] or {}).get("max_lines", 10)))

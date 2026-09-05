@@ -245,9 +245,13 @@ def cmd_healthcheck(args) -> int:
         print("→ SSID 를 config/allowed_networks.yaml 의 ssids 에 등록하십시오.")
         return 0
 
+    from app.alerts.router import AlertRouter
+
     drift, src = measure_drift()
     lock = check_protected_lock()
     ks = KillSwitch().read()
+    router = AlertRouter()
+    pending = router.pending()
     lines = [
         f"버전: {__version__}",
         f"기기: {current_hostname()}",
@@ -259,8 +263,18 @@ def cmd_healthcheck(args) -> int:
         f"데이터 소스: {active_source_labels()} (offline={offline_mode()})",
         f"KR 휴장일 테이블 검증: {'예' if kr_calendar_verified() else '아니오 — 캘린더 게이트는 플래그로만 동작'}",
     ]
+    if router.console_only():
+        lines.append(
+            "알림: 콘솔 전용 모드 — **텔레그램·카카오로 가지 않습니다.** "
+            "reports/alerts.log 에만 남습니다. 실제 알림을 받으려면 .env 에 텔레그램 토큰을 넣고 "
+            "config/alerts.yaml 의 offline_console_only 를 false 로 바꾸십시오."
+        )
+    if not pending.empty:
+        lines.append(f"⚠️ 사람에게 닿지 못한 알림 {len(pending)}건:")
+        for _, r in pending.head(5).iterrows():
+            lines.append(f"   [{r['level']}] {str(r['ts'])[:16]} {str(r['message']).splitlines()[0][:90]}")
     print("\n".join(lines))
-    return 0 if lock.ok and not ks.tripped else 1
+    return 0 if lock.ok and not ks.tripped and pending.empty else 1
 
 
 def cmd_audit(args) -> int:

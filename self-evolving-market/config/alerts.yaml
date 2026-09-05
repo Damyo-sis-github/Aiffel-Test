@@ -30,5 +30,18 @@ retry:
   max_attempts: 5
   resend_on_next_run: true
 
-# 오프라인/CI 에서는 콘솔로만 출력한다.
+# ── 콘솔 전용 모드 ───────────────────────────────────────────────
+# true 면 telegram.enabled 와 무관하게 콘솔 출력만 한다.
+# ⚠️ 작업 스케줄러로 돌면 stdout 은 어디에도 남지 않는다.
+#    그래서 콘솔은 "전달"로 치지 않는다 (아래 console_counts_as_delivery_for 참조).
+#    실제 알림을 받으려면 .env 에 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 를 넣고
+#    이 값을 false 로 바꿔야 한다.
 offline_console_only: true
+
+# 콘솔 출력을 "전달 완료"로 인정할 레벨. 여기 없는 레벨(critical/error/warn)은
+# 미전달 상태로 남아 `quant healthcheck` 에 뜨고, 실제 채널이 생기면 재전송된다.
+console_counts_as_delivery_for: [info]
+
+# 모든 알림은 채널과 무관하게 이 파일에도 append 된다 (reports/ 기준 상대경로).
+# 스케줄러 실행에서 치명적 알림이 조용히 사라지는 것을 막는 최후 보루다.
+log_file: alerts.log

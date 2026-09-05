@@ -263,3 +263,66 @@ def test_telegram_summary_is_capped_at_10_lines(sandbox):
     out = _truncate(long_msg, 10)
     assert len(out.splitlines()) == 11        # 10줄 + 안내 1줄
     assert "+20줄" in out
+
+
+# ---------------------------------------------------------------- 콘솔 전용 모드의 함정
+CONSOLE_CFG = {
+    "channels": {"telegram": {"enabled": True, "levels": ["critical", "info"], "max_lines": 10}},
+    "offline_console_only": True,
+    "console_counts_as_delivery_for": ["info"],
+    "log_file": "alerts.log",
+}
+
+
+def test_console_mode_does_not_count_critical_as_delivered(sandbox):
+    """콘솔 출력은 '전달'이 아니다.
+
+    스케줄러로 돌면 stdout 이 어디에도 남지 않는다. critical 을 전달로 치면
+    킬스위치·기기 승격 알림이 아무도 모르게 사라진다.
+    """
+    from app.alerts.router import AlertRouter, Level
+    from app.data.meta_db import MetaDB
+
+    db = MetaDB()
+    router = AlertRouter(db, cfg=CONSOLE_CFG)
+    router.send(Level.CRITICAL, "기기 레벨 승격 감지")
+    router.send(Level.INFO, "일일 요약")
+
+    pending = router.pending()
+    assert len(pending) == 1
+    assert "승격" in pending.iloc[0]["message"]
+    # info 는 전달로 쳐서 대기열에 남지 않는다
+    assert db.query("SELECT * FROM alerts WHERE level='info' AND delivered=1").shape[0] == 1
+
+
+def test_alerts_always_written_to_log_file(sandbox):
+    """채널과 무관하게 파일 로그는 항상 남는다 — 스케줄러 실행의 최후 보루."""
+    from app.alerts.router import AlertRouter, Level
+    from app.paths import reports_dir
+
+    AlertRouter(cfg=CONSOLE_CFG).send(Level.CRITICAL, "킬스위치 발동")
+    log = reports_dir() / "alerts.log"
+    assert log.exists()
+    assert "킬스위치 발동" in log.read_text(encoding="utf-8")
+    assert "CRITICAL" in log.read_text(encoding="utf-8")
+
+
+def test_console_mode_does_not_spam_retry(sandbox):
+    """콘솔 전용 모드에서는 재전송하지 않는다 (매 실행마다 밀린 알림 전부 재출력 방지)."""
+    from app.alerts.router import AlertRouter, Level
+
+    router = AlertRouter(cfg=CONSOLE_CFG)
+    router.send(Level.CRITICAL, "a")
+    router.send(Level.CRITICAL, "b")
+    assert router.retry_failed() == 0
+    assert len(router.pending()) == 2      # 대기 상태로 남는다
+
+
+def test_shipped_alert_config_warns_about_console_only(sandbox):
+    from app.config import alerts_cfg
+
+    cfg = alerts_cfg()
+    assert cfg["offline_console_only"] is True
+    assert cfg["console_counts_as_delivery_for"] == ["info"], (
+        "critical 을 콘솔 전달로 인정하면 스케줄러 실행에서 조용히 사라집니다."
+    )
