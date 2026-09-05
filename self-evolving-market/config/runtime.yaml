@@ -8,16 +8,32 @@ paths:
   state_dir: state
   audit_dir: audit
 
-# #34 동기화 폴더 안에서 실행 금지. 경로에 이 조각이 들어가면 거부.
+# #34 동기화 폴더 안에서 실행 금지.
+# 경로 **세그먼트 안에 부분 문자열로** 들어가면 거부한다(완전 일치가 아니다).
+#   - "onedrive" 는 `OneDrive - 디알비동일` 같은 Business 폴더명도 잡는다
+#   - 한국어 Windows 는 실제 폴더명이 한글인 경우가 있어 한글 이름도 넣는다
+# fail-closed: 애매하면 거부한다. 오탐이면 저장소를 옮기면 되지만,
+# 미탐이면 회사 테넌트에 파일이 올라간 뒤이고 되돌릴 수 없다.
 forbidden_path_fragments:
+  # 클라우드 동기화
   - OneDrive
   - "Google Drive"
   - Dropbox
   - iCloudDrive
-  - "\\Documents\\"
-  - "\\Desktop\\"
-  - "\\Pictures\\"
   - SharePoint
+  - Nextcloud
+  - 네이버클라우드
+  # 계정에 묶이는 사용자 폴더 (영문)
+  - Documents
+  - Desktop
+  - Pictures
+  - Downloads
+  # 같은 폴더의 한국어 이름 (한국어 Windows)
+  - 문서
+  - 바탕 화면
+  - 바탕화면
+  - 사진
+  - 다운로드
 
 # #23 시계 오차
 clock:

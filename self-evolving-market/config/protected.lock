@@ -5,6 +5,6 @@
     "config/gates.yaml",
     "config/risk.yaml"
   ],
-  "reason": "구현 완료 봉인",
+  "reason": "path_guard 세그먼트 부분일치 수정",
   "acked_by": "unknown"
 }

@@ -169,9 +169,35 @@ def test_path_guard_rejects_synced_folders(sandbox, monkeypatch, path):
     assert not r.ok
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        # OneDrive for Business 는 폴더명이 `OneDrive - <테넌트명>` 이다.
+        # 세그먼트 완전 일치로 찾으면 못 잡는다 — 실제 환경에서 뚫렸던 케이스.
+        r"C:\Users\user\OneDrive - 디알비동일\문서\quant",
+        r"C:\Users\user\OneDrive - 디알비동일\quant",
+        r"D:\OneDrive - Contoso\proj\quant",
+        # 한국어 Windows 는 실제 폴더명이 한글이다. 영어 이름만 막으면 전부 통과한다.
+        r"C:\Users\user\문서\quant",
+        r"C:\Users\user\바탕 화면\quant",
+        r"C:\Users\user\바탕화면\quant",
+        r"C:\Users\user\다운로드\quant",
+        r"C:\Users\user\사진\quant",
+        # 영문
+        r"C:\Users\user\Downloads\quant",
+    ],
+)
+def test_path_guard_rejects_localized_and_business_sync_folders(sandbox, monkeypatch, path):
+    """#34 실제 한국어 Windows + OneDrive for Business 환경에서 뚫렸던 회귀 테스트."""
+    monkeypatch.delenv("QUANT_GUARD_BYPASS", raising=False)
+    r = path_guard(Path(path))
+    assert not r.ok, f"동기화/계정 폴더인데 통과했습니다: {path}"
+
+
 def test_path_guard_accepts_clean_path(sandbox, monkeypatch):
     monkeypatch.delenv("QUANT_GUARD_BYPASS", raising=False)
     assert path_guard(Path(r"C:\dev\quant")).ok
+    assert path_guard(Path(r"D:\quant")).ok
 
 
 def test_path_guard_rejects_onedrive_env_root(sandbox, monkeypatch):
