@@ -37,15 +37,7 @@ from app.evolve.trigger import evaluate_triggers, write_pending
 from app.execution.broker import Order as BrokerOrder
 from app.execution.paper_sim import PaperBroker
 from app.features.builder import FeatureBuilder
-from app.guards import (
-    GuardViolation,
-    clock_guard,
-    host_guard,
-    network_guard,
-    path_guard,
-    protected_lock_guard,
-    run_guards,
-)
+from app.guards import DAILY_GUARDS, GuardViolation, run_guards
 from app.guards.base import bypass_enabled
 from app.paths import state_dir
 from app.pipeline import state as snap_state
@@ -106,11 +98,7 @@ class DailyRunner:
     def check_guards(self) -> list[str]:
         if self.skip_guards:
             return ["가드 검사 생략 (--skip-guards, 개발 전용)"]
-        results = run_guards(
-            [host_guard, network_guard, path_guard, clock_guard, protected_lock_guard],
-            raise_on_fail=True,
-        )
-        return [str(r) for r in results]
+        return [str(r) for r in run_guards(DAILY_GUARDS, raise_on_fail=True)]
 
     # ------------------------------------------------------------ 실행
 

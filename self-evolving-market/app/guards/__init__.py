@@ -11,16 +11,29 @@
 
 from app.guards.base import GuardResult, GuardViolation, run_guards
 from app.guards.clock import clock_guard
+from app.guards.device import device_guard
 from app.guards.host import host_guard
 from app.guards.llm_window import llm_window_guard, next_allowed_llm_time
 from app.guards.network import network_guard
 from app.guards.path import path_guard
 from app.guards.protected import protected_lock_guard
 
+# daily/evolve 시작 시 이 순서로 돈다. 하나라도 거부면 실행하지 않는다.
+DAILY_GUARDS = (
+    host_guard,
+    network_guard,
+    path_guard,
+    device_guard,
+    clock_guard,
+    protected_lock_guard,
+)
+
 __all__ = [
+    "DAILY_GUARDS",
     "GuardResult",
     "GuardViolation",
     "clock_guard",
+    "device_guard",
     "host_guard",
     "llm_window_guard",
     "network_guard",

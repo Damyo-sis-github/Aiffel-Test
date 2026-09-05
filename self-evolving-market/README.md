@@ -62,18 +62,46 @@ python -m app.cli evaluate --start 2016-01-01 --date 2020-12-31 --control-size 2
 
 ---
 
-## 실행 조건 3종 (§11.1, #31·#33·#34)
+## 실행 조건 (§11.1, #31·#33·#34, §11.8)
 
-`daily`/`evolve` 는 **셋 다 만족할 때만** 실행됩니다. 하나라도 어긋나면 실행하지 않고 텔레그램으로 사유를 보냅니다.
+`daily`/`evolve` 는 **전부 만족할 때만** 실행됩니다. 하나라도 어긋나면 실행하지 않고 텔레그램으로 사유를 보냅니다.
 
 | 가드 | 설정 | 확인 |
 |---|---|---|
 | 등록된 기기 | `config/allowed_hosts.yaml` | `quant healthcheck --show-host` |
 | 집 네트워크 | `config/allowed_networks.yaml` | `quant healthcheck --show-network` |
-| 비동기화 경로 | `C:\dev\quant` (OneDrive·Documents·Desktop 밖) | `quant healthcheck` |
+| 비동기화 경로 | `C:\dev\quant` (OneDrive·문서·바탕 화면 밖) | `quant healthcheck` |
+| **기기 가시성** | `config/device_policy.yaml` | **`quant audit --device`** |
+| 시계 오차 ≤ 60s | `config/runtime.yaml` | `quant healthcheck` |
+| `protected.lock` 일치 | — | `quant lock` |
 
 전부 **fail-closed** 입니다. 화이트리스트가 비어 있으면 통과가 아니라 거부입니다.
 `QUANT_GUARD_BYPASS=1` 은 개발 전용이고, 켜지면 모든 리포트에 배너가 박힙니다.
+
+### 기기 가시성 감사 (§11.8)
+
+**"회사가 이 기기에서 무엇을 볼 수 있는가"** 를 레벨로 잽니다.
+
+| 레벨 | 상태 | 회사가 보는 것 | 폴더·네트워크로 막을 수 있나 |
+|---|---|---|---|
+| 0 | 연결 없음 | — | — |
+| 1 | 계정 경로 동기화 (OneDrive·KFM) | **그 폴더 안 파일 전체** | ✅ 저장소를 밖에 두면 됨 |
+| 2 | 기기 등록 (WorkplaceJoined 등) | 기기명·OS·모델·로그인 시각 | ❌ 무관 |
+| 3 | MDM (Intune) | 앱 목록·정책·원격 스크립트 | ❌ 무관 |
+| 4 | EDR / 문서보안(DLP·DRM) | **프로세스 실행 기록·파일 접근** | ❌ 무관 |
+
+```bash
+quant audit --device                    # 지금 레벨 확인
+quant audit --device --accept-baseline  # 현재 상태를 승격 감시 기준선으로 저장
+```
+
+명세 §11.8 의 원문 전제는 **레벨 ≤ 1** 이고 `device_policy.yaml` 기본값도 그렇습니다.
+레벨 2 를 허용하려면 `overrides.allow_registered_without_mdm` 을 **사람이 근거를 적고** 켜야 합니다.
+레벨 3·4 는 `never_allow` 에 있어 어떤 예외로도 넘을 수 없습니다.
+
+> **승격 감시**: 레벨 2 는 조용히 레벨 3 이 될 수 있습니다. 회사가 Intune 을 활성화하면
+> 이미 등록된 기기는 **사용자 동의 없이** MDM 으로 승격됩니다.
+> 그래서 `daily` 는 매 실행마다 레벨을 재확인하고, 지난 기준선보다 올라가면 **즉시 중단**합니다.
 
 ---
 

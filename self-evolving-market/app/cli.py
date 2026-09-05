@@ -263,6 +263,34 @@ def cmd_healthcheck(args) -> int:
     return 0 if lock.ok and not ks.tripped else 1
 
 
+def cmd_audit(args) -> int:
+    """§11.8 / §17 기기 가시성 감사. 회사가 이 기기에서 무엇을 볼 수 있는가."""
+    from app.guards.device import evaluate, policy, read_last, write_last
+    from app.guards.device_audit import assess
+
+    audit = assess()
+    print(audit.render())
+    print()
+
+    cfg = policy()
+    result = evaluate(audit, cfg, read_last())
+    print(str(result))
+    if not result.ok:
+        print()
+        print(f"  정책: max_level={cfg.get('max_level')}, "
+              f"never_allow={cfg.get('never_allow')}, "
+              f"예외={(cfg.get('overrides') or {}).get('allow_registered_without_mdm')}")
+
+    if args.accept_baseline:
+        if not audit.checked:
+            print("Windows 가 아니라 기준선을 저장하지 않습니다.")
+            return 1
+        write_last(audit)
+        print(f"\n현재 상태를 승격 감시 기준선으로 저장했습니다 (레벨 {int(audit.level)}).")
+        print("이후 레벨이 올라가면 daily 가 자동으로 중단됩니다.")
+    return 0 if result.ok else 1
+
+
 def cmd_replay(args) -> int:
     """§11.7 당시 데이터·코드·게이트 해시로 결정 재현. 재현 불가 = 버그."""
     from app.data.meta_db import MetaDB
@@ -370,6 +398,12 @@ def build_parser() -> argparse.ArgumentParser:
     h.add_argument("--show-host", action="store_true")
     h.add_argument("--show-network", action="store_true")
     h.set_defaults(func=cmd_healthcheck)
+
+    a = sub.add_parser("audit", help="§11.8 기기 가시성 감사 (회사가 무엇을 볼 수 있는가)")
+    a.add_argument("--device", action="store_true", help="기기 감사 (기본 동작)")
+    a.add_argument("--accept-baseline", action="store_true",
+                   help="현재 상태를 승격 감시 기준선으로 저장")
+    a.set_defaults(func=cmd_audit)
 
     rp = sub.add_parser("replay", help="§11.7 결정 재현")
     rp.add_argument("--date", required=True)

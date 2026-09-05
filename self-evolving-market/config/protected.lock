@@ -5,6 +5,6 @@
     "config/gates.yaml",
     "config/risk.yaml"
   ],
-  "reason": "path_guard 세그먼트 부분일치 수정",
+  "reason": "device_audit 가드 추가",
   "acked_by": "unknown"
 }
