@@ -110,6 +110,37 @@ def test_page_reports_its_own_age(sandbox):
     assert "quant report" in html          # 오래됐을 때 무엇을 해야 하는지 알려준다
 
 
+def test_rankings_are_read_not_recomputed(sandbox, monkeypatch):
+    """대시보드는 읽는 곳이다. 여기서 피처 패널을 다시 지으면 daily 가 그만큼 느려진다.
+
+    실제로 그랬다 — daily 5.2초 중 1.6초가 대시보드의 패널 재계산이었다.
+    """
+    from app.features.builder import FeatureBuilder
+
+    def boom(*a, **k):
+        raise AssertionError("대시보드가 피처 패널을 다시 만들고 있습니다")
+
+    monkeypatch.setattr(FeatureBuilder, "build", boom)
+    monkeypatch.setattr(FeatureBuilder, "rankings", boom)
+    data = dashboard_data.build(dt.date(2020, 12, 31), db=MetaDB())
+    assert data["rankings"]["themes"] == []          # 파일이 없으면 빈 값, 예외 아님
+
+
+def test_rankings_come_from_the_file_daily_wrote(sandbox):
+    from app.paths import state_dir
+
+    p = state_dir() / "rankings.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "as_of": "2020-12-31",
+        "themes": [{"theme": "uranium", "n": 2, "score": 84.2}],
+        "countries": [], "screener": [],
+    }), encoding="utf-8")
+    r = dashboard_data.build(dt.date(2020, 12, 31), db=MetaDB())["rankings"]
+    assert r["themes"] == [{"theme": "uranium", "n": 2.0, "score": 84.2}]
+    assert r["as_of"] == "2020-12-31"
+
+
 def test_w_pred_carries_b_pred_slot(sandbox):
     """#25 W_pred 는 B_pred 와 함께만 읽힌다. 자리를 비워두더라도 키는 항상 있다."""
     data = dashboard_data.build(dt.date(2020, 12, 31), db=MetaDB())

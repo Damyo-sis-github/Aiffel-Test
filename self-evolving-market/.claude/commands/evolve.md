@@ -14,6 +14,10 @@ description: 진화 사이클 1회 실행 (§10). trigger_pending 이 있을 때
 
 ## 0. 전제 확인
 
+**사이클 id 는 인자로 받는다** (`/evolve <cycle_id>`). 지어내지 마라 —
+`evaluate --cycle`, `/audit`, `cycle-complete` 가 같은 id 를 써야 다중검정 K 와
+쿨다운이 한 사이클로 묶인다.
+
 ```bash
 cat state/trigger_pending.json
 ```
@@ -118,13 +122,19 @@ git add app/strategies/proposed app/features/proposed
 git commit -m "evolve: cycle <id> — 가설 N개"
 ```
 
-`evolution_log` 에 남길 내용:
-- 트리거 코드와 대상
-- 가설별 상태 (proposed / invalid / candidate / rejected)
-- 게이트 실패 사유 (있는 그대로)
-- 누적 K 와 α_K
+그리고 **사이클 종료를 반드시 기록한다.** 이게 쿨다운을 시작시킨다:
 
-마지막에 `state/trigger_pending.json` 을 지운다.
+```bash
+quant cycle-complete --cycle <id> --targets <전략id,쉼표구분> --trigger <T1|T2|T3> \
+  --note "가설 N개 → candidate M개 / 반려 K개, K=<n> α_K=<x>"
+```
+
+이 명령이 `state/trigger_pending.json` 도 지운다. 직접 지우지 마라.
+
+기록하지 않으면 **같은 트리거가 매일 밤 다시 깨어난다.** 쿨다운(20 거래일 그리고
+청산 20건)은 `evolution_log` 의 `cycle_complete` 행으로만 판정된다.
+빠뜨려도 `quant evolve` 가 세션 종료 후 대신 찍지만, 그 경우 `--note` 의 요약이
+남지 않는다 — 나중에 이 사이클이 무엇을 했는지 읽을 수 없다.
 
 ## 보고 형식 (텔레그램 요약, 10줄 이내)
 

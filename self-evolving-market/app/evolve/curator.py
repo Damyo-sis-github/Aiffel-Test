@@ -132,11 +132,23 @@ class Curator:
         return Transition(strategy_id, before, "retired", reason)
 
     def quarantine(self, strategy_id: str, reason: str) -> Transition:
-        """§9 괴리 추적: 20거래 이동평균 괴리 > 0.3% → quarantine."""
-        self.db.upsert("strategy_state", [{"strategy_id": strategy_id, "family": "", "version": "",
-                                           "status": "candidate", "since": dt.date.today().isoformat(),
-                                           "allocation_pct": 0.0, "quarantined": 1, "note": reason}])
-        return Transition(strategy_id, "active", "quarantined", reason)
+        """§9 괴리 추적: 20거래 이동평균 괴리 > 0.3% → quarantine.
+
+        family·version 은 **기존 값을 지킨다.** 빈 문자열로 upsert 하면 계열이 지워지고,
+        계열 게이트(#9 SHORT/LEV/INV 활성화 순서)가 그 전략을 못 알아본다.
+        """
+        row = self.db.query(
+            "SELECT family, version, status FROM strategy_state WHERE strategy_id = ?", (strategy_id,)
+        )
+        before = str(row.iloc[0]["status"]) if not row.empty else "active"
+        self.db.upsert("strategy_state", [{
+            "strategy_id": strategy_id,
+            "family": str(row.iloc[0]["family"]) if not row.empty else "",
+            "version": str(row.iloc[0]["version"]) if not row.empty else "1.0.0",
+            "status": before, "since": dt.date.today().isoformat(),
+            "allocation_pct": 0.0, "quarantined": 1, "note": reason,
+        }])
+        return Transition(strategy_id, before, "quarantined", reason)
 
     # ------------------------------------------------------------ 배분
 

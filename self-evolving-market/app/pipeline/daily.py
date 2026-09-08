@@ -35,6 +35,8 @@ from app.evaluator.stats import wilson_ci
 from app.evolve.curator import Curator
 from app.evolve.trigger import evaluate_triggers, write_pending
 from app.execution.broker import Order as BrokerOrder
+from app.execution.divergence import assumed_fill_price
+from app.execution.divergence import check as divergence_check
 from app.execution.paper_sim import PaperBroker
 from app.features.builder import FeatureBuilder
 from app.guards import DAILY_GUARDS, GuardViolation, run_guards
@@ -58,6 +60,7 @@ from app.util.hashing import hash_obj
 
 PENDING_ORDERS_FILE = "pending_orders.json"
 PREDICTIONS_FILE = "predictions.json"
+RANKINGS_FILE = "rankings.json"
 FEATURE_LOOKBACK_DAYS = 400
 
 
@@ -185,7 +188,7 @@ class DailyRunner:
         for f in fills:
             if f.rejected:
                 msgs.append(f"체결 거부 {f.order.symbol}: {f.reject_reason}")
-        self._record_trades(fills, date)
+        self._record_trades(fills, date, book=book, costs=costs)
 
         # ---- 3. 예측 채점 → W_pred
         preds = self._load_predictions()
@@ -236,6 +239,21 @@ class DailyRunner:
         # ---- 7. 트리거 평가
         all_trades = self.db.query("SELECT * FROM trades")
         triggers = []
+        # ---- 7b. §9 괴리 추적 → quarantine
+        # 백테스트 가정 체결가와 페이퍼 체결가가 20거래 평균 0.3% 넘게 갈라지면
+        # 그 전략의 페이퍼 성과를 더 이상 믿을 수 없다. 배분을 0 으로 내린다.
+        div_gaps, div_bad, div_summary = divergence_check(all_trades)
+        for sid in div_bad:
+            gap = float(div_gaps[sid])
+            reason = f"§9 괴리 {gap * 100:.3f}% > 0.300% (최근 20거래 평균)"
+            tr = self.curator.quarantine(sid, reason)
+            msgs.append(f"괴리 격리: {sid} — {reason}")
+            self.alerts.critical(f"[{date}] 괴리 격리 {sid}\n{reason}\n"
+                                 "백테스트와 페이퍼가 갈라졌습니다. 상태 드리프트를 의심하십시오.")
+            self.db.log_evolution(ts=dt.datetime.now().isoformat(timespec="seconds"),
+                                  action="state_transition", before=tr.before, after=tr.after,
+                                  reason=reason)
+
         if not ks_state.tripped:
             triggers = evaluate_triggers(
                 today=date,
@@ -256,7 +274,9 @@ class DailyRunner:
             exposures_by_family=self._family_exposure(broker, date),
             strategy_states=self.curator.states().to_dict("records"),
             integrity={"summary": " / ".join(integrity_summary), "quarantined": sorted(quarantined)},
-            divergence={"summary": "페이퍼 시뮬만 운영 중 — 괴리 측정 대상 없음"},
+            divergence={"summary": div_summary, "quarantined": div_bad,
+                        "by_strategy": {k: (None if v != v else round(float(v), 6))
+                                        for k, v in div_gaps.items()}},
             killswitch=ks_state.message(),
             triggers=[t.__dict__ for t in triggers],
             synthetic=synthetic_in_use(), bypassed=bypass_enabled(),
@@ -279,6 +299,7 @@ class DailyRunner:
                                 for f in fills if not f.rejected),
                 "triggers": sorted(t.code + "|" + t.target for t in triggers),
                 "quarantined": sorted(quarantined),
+                "divergence_quarantined": div_bad,
             }
         )
         self.db.upsert("run_log", [{
@@ -288,6 +309,12 @@ class DailyRunner:
             "status": "ok", "result_hash": result_hash,
             "catchup": int(mode == "보충"), "note": "; ".join(msgs[:5]),
         }])
+        # 3계층 랭킹은 **여기서** 계산해 저장한다. 이미 만들어 둔 패널을 그대로 쓴다.
+        # 대시보드가 자기가 다시 만들면 400일치 피처 패널을 한 벌 더 짓게 되고,
+        # daily 가 그만큼 느려진다. 리포트는 계산하는 곳이 아니라 읽는 곳이다.
+        if (rank_msg := self._save_rankings(panel, date)):
+            msgs.append(rank_msg)
+
         # 대시보드를 여기서 다시 만든다. 열어둔 페이지가 이걸 읽어간다.
         # result_hash 계산이 끝난 **뒤**라서 멱등성·replay 검증에 끼어들지 않는다.
         # 보충(catchup) 루프에서는 끄고, 마지막에 한 번만 만든다 —
@@ -447,12 +474,41 @@ class DailyRunner:
         keep = _normalize_predictions(preds).sort_values("pred_date").tail(20000)
         p.write_text(json.dumps(keep.to_dict("records"), ensure_ascii=False), encoding="utf-8")
 
-    def _record_trades(self, fills, date: dt.date) -> None:
+    def _save_rankings(self, panel, date: dt.date) -> str | None:
+        """§6.3~6.5 테마 → 국가 → 종목. 대시보드가 읽는다. 실패해도 daily 를 죽이지 않는다."""
+        try:
+            r = FeatureBuilder(self.store).rankings(panel, date)
+            payload = {
+                "as_of": date.isoformat(),
+                "themes": r["themes"].head(12).to_dict("records") if not r["themes"].empty else [],
+                "countries": r["countries"].head(12).to_dict("records") if not r["countries"].empty else [],
+                "screener": r["screener"].head(12).to_dict("records") if not r["screener"].empty else [],
+            }
+            path = state_dir() / RANKINGS_FILE
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, ensure_ascii=False, default=str, indent=1),
+                            encoding="utf-8")
+        except Exception as exc:
+            return f"랭킹 저장 실패: {exc}"
+        return None
+
+    def _record_trades(self, fills, date: dt.date, book: PriceBook | None = None,
+                       costs: CostModel | None = None) -> None:
+        """§9 괴리 추적을 위해 백테스트 가정 체결가(bt_px)를 함께 남긴다.
+
+        나중에 계산할 수 없다. 그날의 adv20 과 주문 인자가 있어야 하는 값이다.
+        """
+        day = PriceBook.to_ord(date)
         rows = []
         for f in fills:
             if f.rejected:
                 continue
             o = f.order
+            bt_px = None
+            if book is not None and costs is not None:
+                bar = book.bar(o.symbol, day)
+                if bar is not None:
+                    bt_px = assumed_fill_price(costs, book, o, day, bar["o"])
             rows.append({
                 "trade_id": f"{o.account}-{o.strategy_id}-{o.symbol}-{date.isoformat()}",
                 "account": o.account, "strategy_id": o.strategy_id, "symbol": o.symbol,
@@ -460,7 +516,7 @@ class DailyRunner:
                 "family": "", "signal_date": o.signal_date.isoformat(),
                 "fill_date": date.isoformat(), "fill_px": f.price, "exit_date": None, "exit_px": None,
                 "qty": f.qty, "cost": f.cost, "borrow_cost": 0.0, "pnl": None, "pnl_pct": None,
-                "closed": 0, "exit_reason": None,
+                "closed": 0, "exit_reason": None, "bt_px": bt_px,
             })
         if rows:
             self.db.upsert("trades", rows)

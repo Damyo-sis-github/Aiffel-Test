@@ -163,18 +163,18 @@ powershell -ExecutionPolicy Bypass -File windows\register_tasks.ps1
 
 ```
 app/
-  cli.py                  daily weekly monthly report replay resume lock healthcheck audit evolve backfill evaluate calendar
+  cli.py                  daily weekly monthly report replay resume lock healthcheck audit evolve cycle-complete backfill evaluate calendar
   guards/                 host network path clock protected llm_window     ← 실행 전 fail-closed 검사
   data/                   adapters/{synthetic,market_sources,toss} pit_store integrity ingest meta_db schema
   universe/               snapshot exclusions
   features/               price relstrength macro regime theme country screener builder
   predictions/            publish score (W_pred, B_pred, 클러스터 CI)
   strategies/             base registry seed/{long,tool}_strategies  proposed/(진화 산출물)
-  backtest/               engine costs walkforward
+  backtest/               engine constraints costs walkforward   ← 하드 제약 해석은 여기 한 곳
   evaluator/              gates family_gates stats                   ← protected.lock 봉인
   portfolio/              accounts allocation risk killswitch
-  execution/              broker(Protocol) paper_sim                 ← PaperBroker 만 존재
-  evolve/                 trigger context_pack curator similarity
+  execution/              broker(Protocol) paper_sim divergence      ← PaperBroker 만 존재
+  evolve/                 trigger cycle context_pack curator similarity
   pipeline/               daily positions state
   reports/                daily periodic dashboard(정적 HTML, 서버·CDN 없음)
   alerts/
@@ -184,7 +184,7 @@ windows/                  register_tasks.ps1 run_daily.cmd run_evolve.cmd run_ta
 .claude/commands/         evolve.md audit.md                          ← LLM 호출은 이 두 파일뿐
 .codex/prompts/           review.md                                   ← 리뷰어는 Codex
 scripts/codex_review.sh
-tests/                    213개. §12 의 #1~#34 를 항목별로 강제
+tests/                    262개. §12 의 #1~#34 를 항목별로 강제
 ```
 
 ---
@@ -229,6 +229,8 @@ Codex 를 쓸 수 없는 환경이라면 그 사실을 리포트에 **명시**�
 | B_pred | 계산 비용 때문에 최근 60일 표본으로 근사합니다. |
 | 거래세·수수료 | `config/costs.yaml` 초기값입니다. 2026 실값 확인 필요 (§17). |
 | MDD 15% | **임시값**입니다. 실전 전 본인이 숫자로 확정해야 합니다 (§15). |
+| §9 괴리 | `PaperBroker` 하나뿐이라 지금 이 지표가 재는 것은 실전 슬리피지가 아니라 **백테스트와 페이퍼의 상태 드리프트**입니다. 정상값은 0 이고, 0 이 아니면 버그입니다. Phase 4 에서 KIS 모의투자가 붙으면 진짜 체결 괴리도 함께 잽니다. |
+| 실데이터 어댑터 | 응답 **해석**은 기록된 응답 모양으로 테스트합니다(컬럼명·MultiIndex·tz·결측). 네트워크 호출 자체는 테스트하지 않으므로, `offline: false` 첫 실행은 여전히 실물로 확인해야 합니다. |
 
 ---
 

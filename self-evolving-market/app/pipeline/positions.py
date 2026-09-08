@@ -13,35 +13,19 @@ from __future__ import annotations
 
 import datetime as dt
 
+from app.backtest import constraints
 from app.backtest.costs import CostModel
 from app.backtest.engine import PriceBook
 from app.config import risk as load_risk
 from app.execution.paper_sim import PaperBroker
 from app.universe.snapshot import symbol_meta
 
-
-def stop_pct_for(family: str, horizon: int, cfg: dict | None = None) -> float:
-    stops = (cfg or load_risk())["stop_loss"].get(family, {})
-    if "default" in stops:
-        return float(stops["default"])
-    key = f"h{horizon}"
-    if key in stops:
-        return float(stops[key])
-    keys = sorted(((int(k[1:]), v) for k, v in stops.items() if k.startswith("h")), key=lambda kv: kv[0])
-    for h, v in keys:
-        if horizon <= h:
-            return float(v)
-    return float(keys[-1][1]) if keys else 0.15
-
-
-def max_hold_for(family: str, cfg: dict | None = None) -> int | None:
-    v = ((cfg or load_risk())["hard_constraints"].get("max_hold_days") or {}).get(family)
-    return int(v) if v is not None else None
-
-
-def enforce_horizon(family: str, horizon: int, cfg: dict | None = None) -> int:
-    cap = ((cfg or load_risk())["hard_constraints"].get("max_horizon_days") or {}).get(family)
-    return min(horizon, int(cap)) if cap is not None else horizon
+# 제약 해석은 백테스트 엔진과 **같은 코드**를 쓴다 (app/backtest/constraints.py).
+# 여기서 다시 구현하면 게이트를 통과시킨 규칙과 페이퍼 계좌가 실제로 도는 규칙이
+# 조용히 갈라진다. 아래는 기존 호출부를 위한 이름만 다른 통로다.
+stop_pct_for = constraints.stop_pct
+max_hold_for = constraints.max_hold_days
+enforce_horizon = constraints.enforce_horizon
 
 
 def _hold_days(book: PriceBook, symbol: str, entry: dt.date, today: dt.date) -> int:

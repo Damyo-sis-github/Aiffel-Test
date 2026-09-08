@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS trades (
   signal_date TEXT NOT NULL, fill_date TEXT NOT NULL, fill_px REAL NOT NULL,
   exit_date TEXT, exit_px REAL, qty REAL NOT NULL,
   cost REAL NOT NULL DEFAULT 0, borrow_cost REAL NOT NULL DEFAULT 0,
-  pnl REAL, pnl_pct REAL, closed INTEGER NOT NULL DEFAULT 0, exit_reason TEXT
+  pnl REAL, pnl_pct REAL, closed INTEGER NOT NULL DEFAULT 0, exit_reason TEXT,
+  bt_px REAL                      -- §9 백테스트 가정 체결가. 실제 체결가와의 괴리를 추적한다.
 );
 CREATE INDEX IF NOT EXISTS ix_trades_strat ON trades(strategy_id, account, closed, exit_date);
 
@@ -115,6 +116,20 @@ class MetaDB:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as con:
             con.executescript(SCHEMA)
+            self._add_missing_columns(con)
+
+    # CREATE TABLE IF NOT EXISTS 는 **이미 있는 표에 새 컬럼을 붙이지 않는다.**
+    # 운영 기기에는 이미 거래 이력이 든 DB 가 있다. 지우고 다시 만들면 그 이력이
+    # 사라지고 W_trade·E 가 리셋된다. 그래서 없는 컬럼만 덧붙인다 — 절대 지우지 않는다.
+    ADDED_COLUMNS = (
+        ("trades", "bt_px", "REAL"),
+    )
+
+    def _add_missing_columns(self, con: sqlite3.Connection) -> None:
+        for table, column, decl in self.ADDED_COLUMNS:
+            have = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+            if have and column not in have:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:

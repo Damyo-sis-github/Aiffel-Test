@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from app.backtest import constraints
 from app.backtest.costs import CostModel
 from app.config import risk as load_risk
 from app.features.builder import FeaturePanel
@@ -209,37 +210,28 @@ class BacktestEngine:
         self.gross_max = float(lim["gross_notional_max_pct"])
         self.short_max = float(lim["short_notional_max_pct"])
         self.levinv_max = float(lim["lev_inv_notional_max_pct"])
+        # 손절·보유일 해석은 constraints.py 가 self.risk 를 직접 받아서 한다.
+        # 여기서 미리 꺼내 두면 그 사본을 보고 다시 구현하고 싶어진다.
         self.hard = self.risk["hard_constraints"]
-        self.stops = self.risk["stop_loss"]
 
     # ------------------------------------------------------------ 제약 조회
 
+    # 해석은 app/backtest/constraints.py 하나에만 있다. 여기서 다시 구현하지 마라 —
+    # 페이퍼 경로(pipeline/positions.py)와 갈라지면 게이트는 실제로 돌지 않는
+    # 전략을 판정하게 되고, 그 갈라짐은 어느 테스트에도 걸리지 않는다.
+
     def stop_pct(self, family: str, horizon: int) -> float:
-        cfg = self.stops.get(family, {})
-        if "default" in cfg:
-            return float(cfg["default"])
-        key = f"h{horizon}"
-        if key in cfg:
-            return float(cfg[key])
-        # 호라이즌이 표에 없으면 가장 가까운 큰 호라이즌의 값을 쓴다.
-        keys = sorted(((int(k[1:]), v) for k, v in cfg.items() if k.startswith("h")), key=lambda kv: kv[0])
-        for h, v in keys:
-            if horizon <= h:
-                return float(v)
-        return float(keys[-1][1]) if keys else 0.15
+        return constraints.stop_pct(family, horizon, self.risk)
 
     def max_hold_days(self, family: str) -> int | None:
-        v = (self.hard.get("max_hold_days") or {}).get(family)
-        return int(v) if v is not None else None
+        return constraints.max_hold_days(family, self.risk)
 
     def allowed_regimes(self, family: str) -> tuple[str, ...] | None:
-        v = (self.hard.get("regime_required") or {}).get(family)
-        return tuple(v) if v else None
+        return constraints.allowed_regimes(family, self.risk)
 
     def enforce_horizon(self, family: str, horizon: int) -> int:
         """#19 LEV/INV 는 호라이즌 자체를 5일로 강제한다."""
-        cap = (self.hard.get("max_horizon_days") or {}).get(family)
-        return min(horizon, int(cap)) if cap is not None else horizon
+        return constraints.enforce_horizon(family, horizon, self.risk)
 
     # ------------------------------------------------------------ 실행
 

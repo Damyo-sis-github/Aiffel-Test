@@ -148,6 +148,8 @@ def cmd_evolve(args) -> int:
     import subprocess
 
     from app.data.meta_db import MetaDB
+    from app.evolve.cycle import complete as complete_cycle
+    from app.evolve.cycle import new_cycle_id, targets_of
     from app.evolve.trigger import CONSENSUS_NOTE, read_pending
     from app.guards.llm_window import llm_window_guard
     from app.portfolio.killswitch import KillSwitch
@@ -171,11 +173,19 @@ def cmd_evolve(args) -> int:
         for t in pending.evolution_triggers:
             print(f"  - {t['code']} {t['target']}: {t['reason']}")
 
+    # 사이클 id 를 **여기서** 정해 LLM 에 넘긴다. LLM 이 지어내면 evaluate --cycle,
+    # /audit, cycle-complete 가 서로 다른 id 를 쓰게 되고 쿨다운이 붙지 않는다.
+    triggers = list(pending.triggers) if pending else []
+    targets = targets_of(triggers)
+    cycle_id = new_cycle_id(dt.date.today(), targets)
+    trig_codes = ",".join(sorted({str(t["code"]) for t in triggers if t.get("is_evolution")}))
+    print(f"사이클 id: {cycle_id} (대상 {targets or '없음'})")
+
     if args.dry_run:
         print("--dry-run: Claude Code 헤드리스 호출을 생략합니다.")
         return 0
 
-    cmd = ["claude", "-p", "/evolve", "--max-turns", str(args.max_turns)]
+    cmd = ["claude", "-p", f"/evolve {cycle_id}", "--max-turns", str(args.max_turns)]
     print("실행:", " ".join(cmd))
     try:
         proc = subprocess.run(cmd, check=False, timeout=args.timeout)
@@ -188,7 +198,31 @@ def cmd_evolve(args) -> int:
     except subprocess.TimeoutExpired:
         print("evolve 세션 타임아웃. 당일 재시도 없음 → 다음날 19:00 (§11.3).")
         return 1
+
+    # 쿨다운 백스톱. LLM 이 cycle-complete 를 부르지 않고 끝내도 여기서 찍는다.
+    # 안 찍으면 같은 트리거가 매일 밤 evolve 를 다시 깨워 크레딧을 계속 태운다.
+    if complete_cycle(cycle_id, targets, trigger=trig_codes,
+                      reason=f"evolve 세션 종료(코드 {proc.returncode}) 후 자동 기록"):
+        print(f"쿨다운 시작: {cycle_id} — 대상 {targets or '(없음)'} "
+              "(20 거래일 그리고 청산 20건)")
     return proc.returncode
+
+
+def cmd_cycle_complete(args) -> int:
+    """§10 `/evolve` 5단계. 사이클 종료를 남기고 trigger_pending 을 지운다.
+
+    이 명령이 없어서 LLM 이 명세를 지킬 방법이 없었다 — 그래서 쿨다운이 죽어 있었다.
+    """
+    from app.evolve.cycle import complete as complete_cycle
+
+    targets = [t.strip() for t in (args.targets or "").split(",") if t.strip()]
+    wrote = complete_cycle(args.cycle, targets, trigger=args.trigger, reason=args.note or "")
+    if not wrote:
+        print(f"이미 기록된 사이클입니다: {args.cycle} (중복 기록하지 않습니다)")
+        return 0
+    print(f"사이클 종료 기록: {args.cycle} — 대상 {targets or '(없음)'}")
+    print("쿨다운: 이 대상들은 20 거래일 그리고 청산 20건이 지나야 다시 진화 대상이 됩니다 (§10.2).")
+    return 0
 
 
 def cmd_lock(args) -> int:
@@ -421,6 +455,13 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--max-turns", type=int, default=40)
     v.add_argument("--timeout", type=int, default=3600)
     v.set_defaults(func=cmd_evolve)
+
+    cc = sub.add_parser("cycle-complete", help="§10.2 진화 사이클 종료 기록 → 쿨다운 시작")
+    cc.add_argument("--cycle", required=True, help="사이클 id (evolve 가 출력한 값)")
+    cc.add_argument("--targets", default="", help="쿨다운을 걸 전략 id, 쉼표 구분")
+    cc.add_argument("--trigger", default=None, help="이 사이클을 부른 트리거 코드")
+    cc.add_argument("--note", default="", help="사이클 요약 (채택/반려 수 등)")
+    cc.set_defaults(func=cmd_cycle_complete)
 
     lk = sub.add_parser("lock", help="protected.lock 검사/갱신 (G2)")
     lk.add_argument("--update", action="store_true")

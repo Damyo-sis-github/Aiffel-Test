@@ -135,30 +135,35 @@ def _prediction_stats(db: MetaDB) -> list[dict]:
 
 
 def _rankings(as_of: dt.date) -> dict[str, list[dict]]:
-    """§6.3~6.5 테마 → 국가 → 종목. PIT 로만 읽는다."""
-    from app.data.pit_store import PITStore
-    from app.features.builder import FeatureBuilder
+    """§6.3~6.5 테마 → 국가 → 종목.
 
+    `daily` 가 계산해 `state/rankings.json` 에 남긴 것을 **읽기만** 한다.
+    여기서 다시 계산하면 400일치 피처 패널을 한 벌 더 짓게 되고, daily 가 대시보드를
+    갱신할 때마다 그 비용을 다시 문다. 리포트는 계산하는 곳이 아니다.
+    """
+    from app.paths import state_dir
+
+    path = state_dir() / "rankings.json"
     try:
-        store = PITStore()
-        panel = FeatureBuilder(store).build(as_of, start=as_of - dt.timedelta(days=400))
-        r = FeatureBuilder(store).rankings(panel, as_of)
-    except Exception:
-        return {"themes": [], "countries": [], "screener": []}
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"themes": [], "countries": [], "screener": [], "as_of": None}
 
-    def rows(df: pd.DataFrame, keys: list[str], n: int = 8) -> list[dict]:
-        if df is None or df.empty:
-            return []
-        keep = [k for k in keys if k in df.columns]
-        return [
-            {k: (_f(v) if isinstance(v, (int, float, np.number)) else str(v)) for k, v in row.items()}
-            for row in df.head(n)[keep].to_dict("records")
-        ]
+    def rows(records: list[dict], keys: list[str], n: int = 8) -> list[dict]:
+        out = []
+        for row in (records or [])[:n]:
+            out.append({
+                k: (_f(row[k]) if isinstance(row.get(k), (int, float, np.number)) else str(row[k]))
+                for k in keys if k in row
+            })
+        return out
 
     return {
-        "themes": rows(r["themes"], ["theme", "n", "score"]),
-        "countries": rows(r["countries"], ["symbol", "name", "score"]),
-        "screener": rows(r["screener"], ["symbol", "market", "theme", "score"]),
+        "themes": rows(raw.get("themes"), ["theme", "n", "score"]),
+        "countries": rows(raw.get("countries"), ["symbol", "name", "score"]),
+        "screener": rows(raw.get("screener"), ["symbol", "market", "theme", "score"]),
+        # 랭킹이 대시보드의 기준일보다 오래됐으면 화면이 그렇게 말해야 한다.
+        "as_of": raw.get("as_of"),
     }
 
 
