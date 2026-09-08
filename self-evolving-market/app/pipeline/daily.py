@@ -50,6 +50,7 @@ from app.portfolio.risk import RiskEngine
 from app.predictions.publish import publish_predictions
 from app.predictions.score import rolling_edge, score_predictions, summarize
 from app.reports.daily import DailyReport, render_daily, write_daily
+from app.reports.dashboard import refresh_quietly
 from app.strategies.registry import all_strategies, get_strategy
 from app.universe.snapshot import UniverseBuilder, all_symbols, kind_of
 from app.util.calendars import CalendarCoverageError, is_trading_day, trading_days
@@ -109,6 +110,7 @@ class DailyRunner:
         market: str | None = None,
         mode: str = "실시간",
         push: bool = False,
+        refresh_dashboard: bool = True,
     ) -> DailyOutcome:
         msgs: list[str] = []
         try:
@@ -286,6 +288,13 @@ class DailyRunner:
             "status": "ok", "result_hash": result_hash,
             "catchup": int(mode == "보충"), "note": "; ".join(msgs[:5]),
         }])
+        # 대시보드를 여기서 다시 만든다. 열어둔 페이지가 이걸 읽어간다.
+        # result_hash 계산이 끝난 **뒤**라서 멱등성·replay 검증에 끼어들지 않는다.
+        # 보충(catchup) 루프에서는 끄고, 마지막에 한 번만 만든다 —
+        # 랭킹 재계산이 무거워서 60일치를 매일 다시 그리면 몇 분이 그냥 날아간다.
+        if refresh_dashboard:
+            refresh_quietly(date)
+
         if push:
             self._git_push(date)
         return DailyOutcome(date, True, mode, result_hash, path, telegram, messages=msgs)
@@ -311,9 +320,11 @@ class DailyRunner:
             return [DailyOutcome(until, False, "보충", "", summary=msg)]
         out = []
         for d in days:
-            out.append(self.run(d, mode="보충", push=False))
+            out.append(self.run(d, mode="보충", push=False, refresh_dashboard=False))
             if not out[-1].ok:
                 break
+        if out and out[-1].ok:
+            refresh_quietly(out[-1].date)
         if push and out and out[-1].ok:
             self._git_push(until)
         return out

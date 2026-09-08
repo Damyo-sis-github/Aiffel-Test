@@ -75,6 +75,41 @@ def test_win_rate_never_ships_without_n_and_ci(sandbox):
             assert s["n"] and s["ci_low"] is not None and s["ci_high"] is not None
 
 
+# ------------------------------------------------------------ 자동 갱신
+def test_watch_adds_meta_refresh_and_default_has_none(sandbox):
+    """--watch 없이는 페이지가 스스로 다시 읽지 않는다. 붙였을 때만 붙는다."""
+    plain = dashboard.render(dashboard_data.build(dt.date(2020, 12, 31), db=MetaDB()))
+    assert "http-equiv=\"refresh\"" not in plain
+
+    watched = dashboard.render(dashboard_data.build(dt.date(2020, 12, 31), db=MetaDB()),
+                               refresh_sec=300)
+    assert '<meta http-equiv="refresh" content="300">' in watched
+
+
+def test_refresh_keeps_watch_interval(sandbox):
+    """--watch 로 띄워둔 페이지를 daily 가 갱신 없는 파일로 덮으면 그 자리에서 멈춘다.
+
+    사용자는 최신인 줄 알고 계속 본다. 그래서 기존 파일의 주기를 이어받는다.
+    """
+    dashboard.write(dt.date(2020, 12, 31), refresh_sec=120)
+    dashboard.refresh_quietly(dt.date(2020, 12, 31))
+    html = (sandbox / "reports" / "dashboard.html").read_text(encoding="utf-8")
+    assert '<meta http-equiv="refresh" content="120">' in html
+
+
+def test_refresh_quietly_never_raises(sandbox, monkeypatch):
+    """대시보드는 보조 산출물이다. 여기서 죽어서 daily 가 멈추면 안 된다."""
+    monkeypatch.setattr(dashboard, "build", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert dashboard.refresh_quietly(dt.date(2020, 12, 31)) is None
+
+
+def test_page_reports_its_own_age(sandbox):
+    """자동 갱신되는 화면이 조용히 어제 숫자를 보여주는 것은 수동보다 나쁘다."""
+    html = _html(sandbox)
+    assert "generated_at" in html and "freshness" in html
+    assert "quant report" in html          # 오래됐을 때 무엇을 해야 하는지 알려준다
+
+
 def test_w_pred_carries_b_pred_slot(sandbox):
     """#25 W_pred 는 B_pred 와 함께만 읽힌다. 자리를 비워두더라도 키는 항상 있다."""
     data = dashboard_data.build(dt.date(2020, 12, 31), db=MetaDB())

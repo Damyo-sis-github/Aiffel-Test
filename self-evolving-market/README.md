@@ -45,6 +45,19 @@ python -m app.cli report --open           # 대시보드 HTML 하나를 만들�
 감지됩니다(§11.8). 외부 CDN 도 쓰지 않아 오프라인에서 열립니다. 읽기 전용이라
 대시보드에서 게이트를 통과시키거나 상태를 바꿀 수 있는 경로는 없습니다.
 
+**열어두고 쓰려면** `--watch` 를 붙입니다:
+
+```bash
+python -m app.cli report --watch --open      # 기본 300초마다 스스로 다시 읽음
+```
+
+상주 프로세스가 아닙니다. 페이지에 `<meta http-equiv="refresh">` 가 들어갈 뿐이고,
+새 내용은 `daily`(장 마감 후)와 `healthcheck`(매시)가 파일을 다시 만들면서 생깁니다.
+띄워둔 페이지는 다음 주기에 그걸 읽어갑니다.
+
+화면 상단에 **자기 나이**가 항상 표시되고, 하루가 넘으면 빨간 배너로 바뀝니다.
+자동 갱신되는 화면이 조용히 어제 숫자를 보여주는 것은 수동 화면보다 나쁘기 때문입니다.
+
 전략 평가:
 
 ```bash
@@ -124,7 +137,7 @@ powershell -ExecutionPolicy Bypass -File windows\register_tasks.ps1
 | 화~토 07:00 | `daily --market us` | 없음 |
 | 매일 19:00 | `evolve --if-pending` | Claude Code 헤드리스 |
 | 토 09:00 / 매월 1일 09:00 | `weekly` / `monthly` | 없음 |
-| 매시 | `healthcheck` | 없음 |
+| 매시 | `healthcheck` (+ 대시보드 갱신) | 없음 |
 
 **상시 가동은 필요 없습니다.** 페이퍼 체결가는 "다음날 시가"라는 과거 확정값이라,
 노트북이 5일 꺼져 있다가 켜지면 `--catchup` 이 5일치를 순서대로 처리하고 결과는 매일 돌린 것과 **같습니다**.

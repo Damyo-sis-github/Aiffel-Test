@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from pathlib import Path
 
 from app.paths import reports_dir
@@ -98,6 +99,9 @@ td.dim{color:var(--muted)}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;
   vertical-align:-1px;box-shadow:0 0 0 2px var(--surface-1)}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin:0 0 8px}
+/* 신선도. 자동 갱신되는 화면이 조용히 옛날 숫자를 보여주는 것이 수동보다 나쁘다. */
+.age{color:var(--muted)}
+.age.old{color:var(--crit);font-weight:600}
 .status{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:13px}
 .status .ic{font-size:14px;width:18px;text-align:center}
 .note{font-size:12px;color:var(--muted);margin-top:10px}
@@ -290,15 +294,42 @@ function boot(){
   rankChart('#countries',D.rankings.countries,'name');
   rankChart('#screener',D.rankings.screener,'symbol','theme');
 }
+/* 색을 클래스로 주므로 테마를 바꿔도 다시 그릴 필요가 없다. 속성만 바꾼다. */
 $('#theme-toggle').addEventListener('click',()=>{
   const cur=document.documentElement.getAttribute('data-theme');
-  const next=cur==='dark'?'light':'dark';
-  document.documentElement.setAttribute('data-theme',next);
-  document.querySelectorAll('#nav,#exp,#themes,#countries,#screener')
-    .forEach(n=>n.innerHTML='');
-  boot();
+  document.documentElement.setAttribute('data-theme',cur==='dark'?'light':'dark');
 });
-boot();
+
+/* ---- 신선도 ----
+   자동 갱신되는 화면이 조용히 어제 숫자를 보여주는 것은 수동 화면보다 나쁘다.
+   생성 시각과 지금을 비교해 나이를 항상 보여주고, 하루가 넘으면 경고로 바꾼다.
+   (이 계산은 보는 사람의 시계로 한다 — 페이지를 열어둔 채 시간이 흘러도 맞는다.) */
+function freshness(){
+  const gen=new Date(D.generated_at); if(isNaN(gen)) return;
+  const min=Math.max(0,Math.round((Date.now()-gen)/60000));
+  const el=$('#age');
+  el.textContent = min<1?'(방금)' : min<60?`(${min}분 전)`
+    : min<1440?`(${Math.floor(min/60)}시간 전)` : `(${Math.floor(min/1440)}일 전)`;
+  el.classList.toggle('old', min>=1440);
+  if(min>=1440){
+    $('#stale').innerHTML='<div class="banner crit">🕒 이 화면은 <b>'+
+      Math.floor(min/1440)+'일 전</b>에 만들어졌습니다. 그 사이 <code>daily</code> 가 '+
+      '돌지 않았거나 노트북이 꺼져 있었습니다. 여기 숫자로 판단하지 마십시오. '+
+      '최신으로 보려면 <code>quant report</code> 를 다시 실행하십시오.</div>';
+  }
+}
+setInterval(freshness, 60000);
+
+/* 자동 갱신(meta refresh)으로 다시 읽혔을 때 보던 위치를 유지한다. */
+addEventListener('beforeunload',()=>{
+  try{ sessionStorage.setItem('dash-scroll', String(scrollY)); }catch(e){}
+});
+
+boot(); freshness();
+try{
+  const y=sessionStorage.getItem('dash-scroll');
+  if(y) scrollTo(0, parseInt(y,10));
+}catch(e){}
 """
 
 
@@ -336,7 +367,7 @@ def _status_row(icon: str, text: str, detail: str = "") -> str:
     return f'<div class="status"><span class="ic">{icon}</span><span>{text}{tail}</span></div>'
 
 
-def render(data: dict) -> str:
+def render(data: dict, *, refresh_sec: int | None = None) -> str:
     h = data["headline"]
     ops = data["operations"]
     n_closed = h["closed_trades"]
@@ -362,7 +393,8 @@ def render(data: dict) -> str:
         _kpi(f'{data["official_account"]} 평가액', _won(h["nav"]),
              note=f'원금 {_won(h["capital"])}',
              delta=(f'원금 대비 {ret * 100:+.2f}%' if ret is not None else ""),
-             cls="ok" if (ret or 0) > 0 else "bad" if ret is not None else "", hero=True),
+             # 정확히 0 은 손실이 아니다. 빨강을 칠하면 없는 신호를 만든다.
+             cls="ok" if (ret or 0) > 0 else "bad" if (ret or 0) < 0 else "", hero=True),
         _kpi("낙폭", _pct(dd), note="킬스위치 한도 −15%",
              delta="한도 근접" if abs(dd) > 0.10 else "", cls="bad" if abs(dd) > 0.10 else ""),
         _kpi("거래 승률 W_trade", _pct(h["win_rate"]) if n_closed else "n/a",
@@ -425,16 +457,23 @@ def render(data: dict) -> str:
         f'<td class="dim">{r.get("result_hash")}</td></tr>'
         for r in ops["runs"]) or '<tr><td colspan="5" class="dim">실행 기록 없음</td></tr>'
 
+    # 자동 갱신은 meta refresh 로만 한다. 파일을 다시 읽는 것뿐이고, 이 페이지가
+    # 스스로 무언가를 가져오거나 바꾸지 않는다 (fetch 도 서버도 없다).
+    refresh_meta = (f'<meta http-equiv="refresh" content="{int(refresh_sec)}">'
+                    if refresh_sec else "")
+
     return f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">{refresh_meta}
 <title>자가 발전형 시장 리서치 — {data["as_of"]}</title>
 <style>{_CSS}</style></head>
 <body><div class="dash wrap">
 <button class="toggle" id="theme-toggle">라이트/다크</button>
 <h1>자가 발전형 시장 리서치</h1>
-<p class="sub">기준일 {data["as_of"]} · 생성 {data["generated_at"]} ·
+<p class="sub">기준일 {data["as_of"]} · 생성 {data["generated_at"]}
+ <span id="age" class="age"></span> ·
  데이터 소스 {data["sources"]} · <b>페이퍼 트레이딩 전용 · 실계좌 주문 없음</b></p>
+<div id="stale"></div>
 {"".join(banners)}
 
 <div class="kpis">{"".join(kpis)}</div>
@@ -483,9 +522,41 @@ def render(data: dict) -> str:
 </body></html>"""
 
 
-def write(as_of: dt.date | None = None, path: Path | None = None) -> Path:
+def write(as_of: dt.date | None = None, path: Path | None = None,
+          *, refresh_sec: int | None = None) -> Path:
     data = build(as_of)
     p = path or (reports_dir() / "dashboard.html")
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(render(data), encoding="utf-8")
+    p.write_text(render(data, refresh_sec=refresh_sec), encoding="utf-8")
     return p
+
+
+def refresh_quietly(as_of: dt.date | None = None) -> Path | None:
+    """daily·healthcheck 끝에서 부르는 자동 갱신.
+
+    대시보드는 **보조 산출물**이다. 여기서 실패해도 파이프라인을 죽이지 않는다.
+    사용자가 열어둔 페이지는 meta refresh 로 다음 주기에 새 파일을 읽는다.
+    """
+    try:
+        prev = (reports_dir() / "dashboard.html")
+        keep = _refresh_of(prev) if prev.exists() else None
+        return write(as_of, refresh_sec=keep)
+    except Exception:
+        return None
+
+
+_REFRESH_RE = re.compile(r'http-equiv="refresh" content="(\d+)"')
+
+
+def _refresh_of(path: Path) -> int | None:
+    """이미 있는 파일의 자동 갱신 주기를 이어받는다.
+
+    --watch 로 켜두고 브라우저에 띄워놨는데 daily 가 갱신 없는 파일로 덮으면
+    그 페이지는 그 자리에서 멈춘다. 사용자는 최신인 줄 알고 계속 본다.
+    """
+    try:
+        head = path.read_text(encoding="utf-8")[:2048]
+    except OSError:
+        return None
+    m = _REFRESH_RE.search(head)
+    return int(m.group(1)) if m else None

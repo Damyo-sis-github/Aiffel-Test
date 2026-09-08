@@ -274,6 +274,14 @@ def cmd_healthcheck(args) -> int:
         for _, r in pending.head(5).iterrows():
             lines.append(f"   [{r['level']}] {str(r['ts'])[:16]} {str(r['message']).splitlines()[0][:90]}")
     print("\n".join(lines))
+
+    # 매시 도는 작업이므로, 열어둔 대시보드의 운영 상태(킬스위치·기기 레벨·미전달
+    # 알림)를 여기서 같이 갱신한다. 실패해도 healthcheck 결과를 바꾸지 않는다.
+    if not args.no_dashboard:
+        from app.reports.dashboard import refresh_quietly
+
+        refresh_quietly()
+
     return 0 if lock.ok and not ks.tripped and pending.empty else 1
 
 
@@ -345,9 +353,13 @@ def cmd_report(args) -> int:
 
     from app.reports.dashboard import write
 
-    p = write(dt.date.fromisoformat(args.date) if args.date else None)
+    p = write(dt.date.fromisoformat(args.date) if args.date else None,
+              refresh_sec=args.watch)
     print(f"대시보드: {p}")
     print("브라우저에서 이 파일을 여십시오. (회사 계정으로 로그인된 브라우저는 피하십시오 — §11.8 4번)")
+    if args.watch:
+        print(f"{args.watch}초마다 스스로 다시 읽습니다. 열어두면 daily·healthcheck 가 "
+              "갱신한 내용이 따라옵니다. (서버는 없습니다 — 파일을 다시 읽을 뿐입니다)")
     if args.open:
         webbrowser.open(p.resolve().as_uri())
     return 0
@@ -425,6 +437,7 @@ def build_parser() -> argparse.ArgumentParser:
     h = sub.add_parser("healthcheck", help="가드·상태 점검")
     h.add_argument("--show-host", action="store_true")
     h.add_argument("--show-network", action="store_true")
+    h.add_argument("--no-dashboard", action="store_true", help="대시보드 갱신을 건너뛴다")
     h.set_defaults(func=cmd_healthcheck)
 
     a = sub.add_parser("audit", help="§11.8 기기 가시성 감사 (회사가 무엇을 볼 수 있는가)")
@@ -446,6 +459,8 @@ def build_parser() -> argparse.ArgumentParser:
     rep = sub.add_parser("report", help="로컬 대시보드 HTML 생성 (서버 없음)")
     rep.add_argument("--date", help="기준일. 생략하면 마지막 daily 실행일")
     rep.add_argument("--open", action="store_true", help="생성 후 브라우저로 열기")
+    rep.add_argument("--watch", nargs="?", type=int, const=300, metavar="초",
+                     help="열어둔 페이지가 스스로 다시 읽게 한다 (기본 300초). 서버 없음")
     rep.set_defaults(func=cmd_report)
 
     w = sub.add_parser("weekly", help="§13.2 주간 리포트")
