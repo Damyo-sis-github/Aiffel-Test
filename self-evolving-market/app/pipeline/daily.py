@@ -25,13 +25,16 @@ import pandas as pd
 from app.alerts.router import AlertRouter, Level
 from app.backtest.costs import CostModel
 from app.backtest.engine import PriceBook
+from app.config import gates as gates_cfg
 from app.config import require_protected_lock, runtime
 from app.config import risk as load_risk
 from app.data.adapters.registry import synthetic_in_use
 from app.data.ingest import Ingestor, integrity_rows
 from app.data.meta_db import MetaDB
 from app.data.pit_store import PITStore
-from app.evaluator.stats import wilson_ci
+from app.evaluator.family_gates import family_activation_open
+from app.evaluator.stats import alpha_for_k, wilson_ci
+from app.evolve.context_pack import build_context_pack, diagnose, write_context_pack
 from app.evolve.curator import Curator
 from app.evolve.trigger import evaluate_triggers, write_pending
 from app.execution.broker import Order as BrokerOrder
@@ -39,6 +42,7 @@ from app.execution.divergence import assumed_fill_price
 from app.execution.divergence import check as divergence_check
 from app.execution.paper_sim import PaperBroker
 from app.features.builder import FeatureBuilder
+from app.features.regime import regime_matrix
 from app.guards import DAILY_GUARDS, GuardViolation, run_guards
 from app.guards.base import bypass_enabled
 from app.paths import state_dir
@@ -264,6 +268,14 @@ class DailyRunner:
                 is_first_trading_day_of_month=self._is_first_trading_day(date),
             )
             write_pending(triggers, dt.datetime.combine(date, dt.time(16, 30)))
+            # 트리거가 있으면 컨텍스트 팩도 **같이** 쓴다.
+            # `/evolve` 0단계가 state/context_pack.json 을 읽는데 그걸 만드는 코드가
+            # 아무 데서도 불리지 않았다. 그 상태로 진화를 돌리면 LLM 이 성과·레짐·
+            # 랭킹·누적 K·계열 게이트·실패 진단을 하나도 못 본 채 가설을 만든다.
+            if any(t.is_evolution for t in triggers) and (
+                cp_msg := self._save_context_pack(date, triggers, all_trades, panel, pred_stats)
+            ):
+                msgs.append(cp_msg)
         else:
             msgs.append("킬스위치 발동 상태 — 신호·진화 정지 (§8.2)")
 
@@ -473,6 +485,43 @@ class DailyRunner:
         # 오래된 예측은 채점이 끝나면 잘라낸다 (파일 비대 방지).
         keep = _normalize_predictions(preds).sort_values("pred_date").tail(20000)
         p.write_text(json.dumps(keep.to_dict("records"), ensure_ascii=False), encoding="utf-8")
+
+    def _save_context_pack(self, date, triggers, all_trades, panel, pred_stats) -> str | None:
+        """§10.3 진화 입력. 실패해도 daily 를 죽이지 않는다 — 트리거는 이미 기록됐다."""
+        try:
+            closed = all_trades[all_trades["closed"] == 1] if not all_trades.empty else all_trades
+            states = self.curator.states()
+            active_by_family: dict[str, int] = {}
+            if not states.empty:
+                act = states[(states["status"] == "active") & (states["quarantined"] == 0)]
+                active_by_family = {str(k): int(v) for k, v in act["family"].value_counts().items()}
+            open_families = {
+                f: family_activation_open(f, active_by_family)[0]
+                for f in sorted(set(states["family"]) if not states.empty else set())
+                if f
+            }
+            k = self.db.current_k()
+            pack = build_context_pack(
+                today=date,
+                triggers=[t.__dict__ for t in triggers],
+                performance=pd.DataFrame(self._performance(all_trades)).T.reset_index(names="strategy_id"),
+                regime_matrix=regime_matrix(closed, panel.regime) if not closed.empty else pd.DataFrame(),
+                rankings=FeatureBuilder(self.store).rankings(panel, date),
+                prediction_stats=pred_stats,
+                strategy_states=states,
+                k_index=k,
+                alpha_k=alpha_for_k(float(gates_cfg().get("control_base_alpha", 0.05)), max(k, 1)),
+                diagnoses={
+                    str(sid): diagnose(g)
+                    for sid, g in (closed.groupby("strategy_id") if not closed.empty else [])
+                },
+                active_by_family=active_by_family,
+                open_families=open_families,
+            )
+            write_context_pack(pack)
+        except Exception as exc:
+            return f"컨텍스트 팩 생성 실패: {exc} — /evolve 가 성과 데이터 없이 돌게 됩니다"
+        return None
 
     def _save_rankings(self, panel, date: dt.date) -> str | None:
         """§6.3~6.5 테마 → 국가 → 종목. 대시보드가 읽는다. 실패해도 daily 를 죽이지 않는다."""

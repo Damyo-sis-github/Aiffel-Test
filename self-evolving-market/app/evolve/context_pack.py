@@ -31,12 +31,38 @@ FAILURE_DIAGNOSES = {
 }
 
 
+def _derive(closed: pd.DataFrame) -> pd.DataFrame:
+    """`trades` 표에 없는 파생 컬럼을 만든다.
+
+    이 함수가 없어서 diagnose() 가 KeyError('gross_pnl') 로 죽었고, 그 바람에
+    컨텍스트 팩 전체가 만들어지지 않았다. 상상한 스키마에 대고 짠 코드였고
+    부르는 곳이 없어 아무도 몰랐다 — 실제 표에는 net pnl 과 비용만 있다.
+    """
+    if closed.empty:
+        return closed
+    df = closed.copy()
+    if "gross_pnl" not in df.columns:
+        # net = gross − 비용  →  gross = net + 비용
+        df["gross_pnl"] = (
+            pd.to_numeric(df["pnl"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(df.get("cost", 0.0), errors="coerce").fillna(0.0)
+            + pd.to_numeric(df.get("borrow_cost", 0.0), errors="coerce").fillna(0.0)
+        )
+    if "hold_days" not in df.columns:
+        # 달력 일수다. 거래일이 아니다 — 상관계수 부호를 보는 용도라 충분하고,
+        # 거래일로 바꾸려면 심볼별 캘린더가 필요해 진단 비용이 커진다.
+        entry = pd.to_datetime(df["fill_date"], errors="coerce")
+        exit_ = pd.to_datetime(df["exit_date"], errors="coerce")
+        df["hold_days"] = (exit_ - entry).dt.days
+    return df
+
+
 def diagnose(trades: pd.DataFrame, fold_expectancies: list[float] | None = None) -> list[str]:
     """자동 실패 진단. 규칙 기반이며 LLM 이 아니라 코드가 낸다."""
     out: list[str] = []
     if trades is None or trades.empty:
         return ["거래 없음: 신호 조건이 너무 좁거나 유니버스와 맞지 않습니다."]
-    closed = trades[trades["closed"] == 1]
+    closed = _derive(trades[trades["closed"] == 1])
     if closed.empty:
         return ["청산 거래 없음: 호라이즌·하드 제약을 확인하십시오."]
 
