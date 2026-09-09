@@ -14,8 +14,24 @@ def current_hostname() -> str:
 
 
 def domain_suffix() -> str:
-    """Windows 도메인 조인 여부 힌트."""
-    return (os.environ.get("USERDNSDOMAIN") or os.environ.get("USERDOMAIN_ROAMINGPROFILE") or "").strip()
+    """도메인 조인 시 나타나는 DNS 도메인. 조인되지 않았으면 빈 문자열.
+
+    `USERDOMAIN_ROAMINGPROFILE` 은 **도메인에 조인되지 않은 PC 에서도** 항상 설정되고,
+    그 값은 컴퓨터 이름이다. 그걸 그대로 도메인으로 읽으면 개인 노트북이 전부
+    "도메인 조인됨"으로 판정되어 daily 가 영원히 실행되지 않는다.
+    실제 기기(DESKTOP-RQQ0696)에서 이 오탐이 확인되었다 — 합성 환경에는 이 환경변수가
+    없어서 테스트가 전부 통과하고 있었다.
+
+    그래서 컴퓨터 이름과 같은 값은 도메인으로 치지 않는다.
+    """
+    dns = (os.environ.get("USERDNSDOMAIN") or "").strip()
+    if dns:
+        return dns                      # 이 변수는 도메인 조인 시에만 존재한다
+    roaming = (os.environ.get("USERDOMAIN_ROAMINGPROFILE") or "").strip()
+    host = current_hostname()
+    if roaming and roaming.lower() == host.lower():
+        return ""                       # 로컬 계정 — 조인 아님
+    return roaming
 
 
 def host_guard() -> GuardResult:
@@ -44,7 +60,7 @@ def host_guard() -> GuardResult:
 
     dom = domain_suffix().lower()
     if cfg.get("reject_if_domain_joined", True) and dom:
-        return GuardResult("host", False, f"도메인 조인된 기기입니다 (USERDNSDOMAIN={dom}).", details)
+        return GuardResult("host", False, f"도메인 조인된 기기입니다 (도메인={dom}).", details)
 
     if not any(low == a.lower() for a in allowed):
         return GuardResult("host", False, f"등록되지 않은 기기입니다: {host}", details)
