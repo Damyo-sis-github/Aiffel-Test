@@ -220,6 +220,11 @@ windows\run_codex_review.cmd staged          # 스테이지된 변경분만
 
 `codex login` 은 브라우저를 엽니다. **회사 계정으로 로그인된 브라우저는 피하십시오** (§11.8 4번).
 
+**모델**: 하네스는 `gpt-5.6-terra` 를 명시합니다. codex 의 기본값을 그대로 두면 계정 종류에 따라
+거부될 수 있습니다 — ChatGPT 계정 로그인에서 기본값 `gpt-5.4` 가 400 으로 튕겼고,
+CLI 자체 안내가 *"GPT-5.4 is no longer available. Codex now uses GPT-5.6 Terra"* 였습니다.
+바꾸려면 `windows\run_codex_review.cmd full gpt-5.6-sol` (bash 는 `--model`).
+
 체크리스트는 `.codex/prompts/review.md` — §12 의 34개 안전장치를 우선순위대로 봅니다.
 Codex 를 쓸 수 없는 환경이라면 그 사실을 리포트에 **명시**하고, 다른 모델의 리뷰를 Codex 리뷰라고 부르지 않습니다.
 (이 저장소의 최초 구현은 Codex 접근이 차단된 환경에서 만들어졌습니다. `docs/review/` 참조.)

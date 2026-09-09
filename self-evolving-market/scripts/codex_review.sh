@@ -5,6 +5,7 @@
 #   bash scripts/codex_review.sh --staged   # 스테이지된 변경분
 #   bash scripts/codex_review.sh --full     # 저장소 전체
 #   bash scripts/codex_review.sh --since HEAD~5
+#   bash scripts/codex_review.sh --full --model gpt-5.6-sol
 #
 # 결과는 docs/review/codex-<타임스탬프>.md 에 저장된다.
 #
@@ -24,12 +25,16 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="$OUT_DIR/codex-$STAMP.md"
 MODE="worktree"
 SINCE=""
+# codex 의 기본 모델은 계정 종류에 따라 거부될 수 있다. ChatGPT 계정에서
+# gpt-5.4 기본값이 400 으로 튕겼다. CLI 안내: GPT-5.4 → GPT-5.6 Terra.
+MODEL="${CODEX_MODEL:-gpt-5.6-terra}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --staged) MODE="staged"; shift ;;
     --full)   MODE="full"; shift ;;
     --since)  MODE="since"; SINCE="$2"; shift 2 ;;
+    --model)  MODEL="$2"; shift 2 ;;
     -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "알 수 없는 옵션: $1" >&2; exit 2 ;;
   esac
@@ -85,8 +90,8 @@ trap 'rm -f "$TMP"' EXIT
   fi
 } > "$TMP"
 
-echo "Codex 리뷰 시작 ($SCOPE)…"
-codex exec --skip-git-repo-check - < "$TMP" | tee "$OUT"
+echo "Codex 리뷰 시작 ($SCOPE) · 모델 ${MODEL:-기본값}"
+codex exec ${MODEL:+-m "$MODEL"} --skip-git-repo-check - < "$TMP" | tee "$OUT"
 
 echo
 echo "리뷰 결과: $OUT"

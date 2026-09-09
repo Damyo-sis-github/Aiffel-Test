@@ -9,6 +9,7 @@
     powershell -ExecutionPolicy Bypass -File windows\codex_review.ps1
     powershell -ExecutionPolicy Bypass -File windows\codex_review.ps1 -Mode staged
     powershell -ExecutionPolicy Bypass -File windows\codex_review.ps1 -Mode since -Since HEAD~5
+    powershell -ExecutionPolicy Bypass -File windows\codex_review.ps1 -Model gpt-5.6-sol
 
   결과는 docs\review\codex-<타임스탬프>.md 에 저장되고 화면에도 나온다.
 
@@ -21,7 +22,11 @@
 param(
     [ValidateSet("full", "worktree", "staged", "since")]
     [string]$Mode = "full",
-    [string]$Since = "HEAD~1"
+    [string]$Since = "HEAD~1",
+    # 모델을 고정한다. codex 의 기본값은 계정 종류에 따라 거부될 수 있다 —
+    # ChatGPT 계정 로그인에서 gpt-5.4 기본값이 400 으로 튕겼다(실제로 겪음).
+    # CLI 자체 안내: "GPT-5.4 is no longer available. Codex now uses GPT-5.6 Terra".
+    [string]$Model = "gpt-5.6-terra"
 )
 
 $ErrorActionPreference = "Stop"
@@ -93,14 +98,15 @@ $outDir = "docs\review"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $out = Join-Path $outDir ("codex-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".md")
 
-Write-Host "Codex 리뷰 시작 ($Scope)…"
+Write-Host "Codex 리뷰 시작 ($Scope) · 모델 $Model"
 Write-Host "몇 분 걸립니다. 중간에 끊지 마십시오."
 Write-Host ""
 
 try {
     # 파일 리다이렉션은 cmd 로 넘긴다 — PowerShell 5.1 에는 '<' 입력 리다이렉션이 없고,
     # Get-Content 파이프는 인코딩을 한 번 더 건드린다.
-    & cmd /c "codex exec --skip-git-repo-check - < `"$tmp`" 2>&1" | Tee-Object -FilePath $out
+    $modelArg = if ([string]::IsNullOrWhiteSpace($Model)) { "" } else { "-m $Model " }
+    & cmd /c "codex exec $modelArg--skip-git-repo-check - < `"$tmp`" 2>&1" | Tee-Object -FilePath $out
 } finally {
     Remove-Item $tmp -ErrorAction SilentlyContinue
 }
