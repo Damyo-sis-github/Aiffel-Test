@@ -181,6 +181,7 @@ app/
 config/                   gates risk costs etf_universe themes exclusions universe_seed
                           runtime allowed_hosts allowed_networks llm_window alerts holidays_kr protected.lock
 windows/                  register_tasks.ps1 run_daily.cmd run_evolve.cmd run_task.cmd
+                          codex_review.ps1 run_codex_review.cmd   ← Windows 에는 bash 가 없다
 .claude/commands/         evolve.md audit.md                          ← LLM 호출은 이 두 파일뿐
 .codex/prompts/           review.md                                   ← 리뷰어는 Codex
 scripts/codex_review.sh
@@ -207,8 +208,17 @@ tests/                    262개. §12 의 #1~#34 를 항목별로 강제
 
 ```bash
 npm install -g @openai/codex && codex login
-bash scripts/codex_review.sh --full
+bash scripts/codex_review.sh --full          # macOS / Linux / Git Bash
 ```
+
+**Windows (기본 환경)** 에는 `bash` 가 없습니다. PowerShell 판을 쓰십시오:
+
+```
+windows\run_codex_review.cmd                 # 전체 리뷰
+windows\run_codex_review.cmd staged          # 스테이지된 변경분만
+```
+
+`codex login` 은 브라우저를 엽니다. **회사 계정으로 로그인된 브라우저는 피하십시오** (§11.8 4번).
 
 체크리스트는 `.codex/prompts/review.md` — §12 의 34개 안전장치를 우선순위대로 봅니다.
 Codex 를 쓸 수 없는 환경이라면 그 사실을 리포트에 **명시**하고, 다른 모델의 리뷰를 Codex 리뷰라고 부르지 않습니다.

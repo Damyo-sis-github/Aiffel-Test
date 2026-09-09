@@ -104,10 +104,19 @@ quant lock                 # protected.lock 일치 여부
 이 저장소의 코드 리뷰는 **Codex** 가 맡는다.
 
 ```bash
-bash scripts/codex_review.sh              # 워킹 트리 변경분 리뷰
+bash scripts/codex_review.sh              # 워킹 트리 변경분 리뷰 (macOS/Linux/Git Bash)
 bash scripts/codex_review.sh --staged     # 스테이지된 변경분
 bash scripts/codex_review.sh --full       # 저장소 전체
 ```
+
+운영 기기는 Windows 이고 거기엔 bash 가 없다. 같은 일을 하는 PowerShell 판을 쓴다:
+
+```
+windows\run_codex_review.cmd             # 전체
+windows\run_codex_review.cmd staged      # 스테이지된 변경분
+```
+
+두 하네스는 같은 체크리스트(`.codex/prompts/review.md`)를 쓴다. 한쪽만 고치지 마라.
 
 리뷰 체크리스트는 `.codex/prompts/review.md` 에 있고, §12 의 34개 안전장치를 기준으로 한다.
 Codex 를 쓸 수 없는 환경이라면 그 사실을 리포트에 **명시**한다. 다른 모델의 리뷰를 Codex 리뷰라고 부르지 않는다.
